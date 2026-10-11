@@ -138,14 +138,15 @@ function provenance(e: { id: string; sessionId: string; agentId: string; turnId:
   const turn = ix.turns.get(turnKey(e.sessionId, e.turnId));
   const before = turn?.reasoning.filter((r) => r.at <= e.at) ?? [];
   const reasoning = before.filter((r) => r.visible).at(-1) ?? before.at(-1) ?? null;
-  const agentName = e.agentId === e.sessionId ? null : ix.agents.get(e.agentId)?.name ?? null;
+  const spawn = e.agentId === e.sessionId ? null : ix.agents.get(e.agentId) ?? null;
   return {
     harness: ix.harnessOf.get(e.sessionId) ?? 'claude-code',
     sessionId: e.sessionId,
     turnId: e.turnId,
     turnNumber: turn?.number ?? 0,
     agentId: e.agentId,
-    agentName,
+    agentName: spawn?.name ?? null,
+    agentBrief: spawn?.brief ?? null,
     prompt: turn?.prompt ? { text: turn.prompt.text, at: turn.prompt.at } : { text: '', at: turn?.firstAt ?? e.at },
     reasoning: reasoning ? { text: reasoning.text, at: reasoning.at } : null,
     tool: e.tool,

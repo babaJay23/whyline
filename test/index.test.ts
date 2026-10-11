@@ -42,8 +42,20 @@ describe('indexEvents', () => {
     const p3 = ix.turns.get(turnKey('sess-1', 'p3'))!;
     expect(p3.prevInterrupted).toBe(true);
     expect([p1.number, p2.number, p3.number]).toEqual([1, 2, 3]);
+    expect(p2.prompt).toBeNull(); // an interrupted turn has no ask of its own
     expect(p1.prevInterrupted).toBe(false);
     expect(ix.turns.get(turnKey('cx-1', 'ct2'))!.interrupted).toBe(true);
+  });
+
+  it('lets a turn with no human prompt inherit the previous ask in its session', async () => {
+    const ix = await index();
+    // p1 spawned the subagent; its rows carry promptId p1, but a later prompt-less turn should still show an ask.
+    const sessions = await findSessions('/repo', HOME, { all: true });
+    const s1 = sessions.selected.find((s) => s.ref.id === 'sess-1')!;
+    s1.events.push({ kind: 'edit', id: 'late', sessionId: 'sess-1', agentId: 'sess-1', turnId: 'p-late', at: Date.parse('2026-10-01T10:00:20Z'), tool: 'Edit', file: '/repo/z.ts', op: { type: 'delete' } });
+    const ix2 = indexEvents(sessions.selected, '/repo');
+    expect(ix2.turns.get(turnKey('sess-1', 'p-late'))!.prompt?.text).toMatch(/^no, don't touch the readme/);
+    expect(ix.turns.get(turnKey('sess-1', 'p1'))!.prompt?.text).toMatch(/^add a TRANSCRIPTION/);
   });
 
   it('groups edits by repo-relative path across harnesses', async () => {

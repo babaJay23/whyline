@@ -17,7 +17,7 @@ const repo: RepoFiles = {
 
 function prov(over: Partial<Provenance> = {}): Provenance {
   return {
-    harness: 'claude-code', sessionId: 's1', turnId: 't1', turnNumber: 1, agentId: 's1', agentName: null,
+    harness: 'claude-code', sessionId: 's1', turnId: 't1', turnNumber: 1, agentId: 's1', agentName: null, agentBrief: null,
     prompt: { text: 'change src/a.ts', at: 100 }, reasoning: null, tool: 'Edit', editId: 'e1', at: 100, turnCost: null, ...over,
   };
 }
@@ -71,8 +71,11 @@ describe('flagHunk', () => {
     const hits = flagHunk(f);
     expect(hits[0]!.flag).toBe('untraced');
     expect(hits[0]!.detail).toContain('s/x/y/ src/a.ts');
-    const later = { ...f.shells[0]!, id: 'sh2', turnId: 't12', at: 90, command: 'python3 fix.py src/a.ts' };
-    expect(flagHunk({ ...f, shells: [f.shells[0]!, later] })[0]!.detail).toContain('fix.py'); // the most recent mention is the likely culprit
+    const later = { ...f.shells[0]!, id: 'sh2', turnId: 't12', at: 90, command: 'python3 fix.py > src/a.ts' };
+    expect(flagHunk({ ...f, shells: [f.shells[0]!, later] })[0]!.detail).toContain('fix.py'); // the most recent write is the likely culprit
+    const readOnly = { ...later, id: 'sh3', at: 95, command: 'git show HEAD -- src/a.ts' };
+    expect(flagHunk({ ...f, shells: [f.shells[0]!, later, readOnly] })[0]!.detail).toContain('fix.py'); // reads are not culprits
+    expect(flagHunk({ ...f, shells: [readOnly] })[0]!.detail).toBe('no structured edit covers these lines');
     expect(flagHunk(facts({ lines: [{ text: 'b', provenance: null }] }))[0]!.detail).toBe('no structured edit covers these lines');
   });
 
@@ -111,7 +114,7 @@ describe('flagHunk', () => {
   });
 
   it('subagent when the lead agent is not the session main agent', () => {
-    const hits = flagHunk(facts({ lead: prov({ agentId: 'abc', agentName: 'helper' }) }));
+    const hits = flagHunk(facts({ lead: prov({ agentId: 'abc', agentName: 'helper', agentBrief: 'write g' }) }));
     expect(hits.map((h) => h.flag)).toEqual(['subagent']);
     expect(hits[0]!.detail).toBe('helper');
   });

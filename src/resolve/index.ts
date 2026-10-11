@@ -90,6 +90,12 @@ export function indexEvents(sessions: Session[], repoRoot: string): EventIndex {
     list.sort((a, b) => a.firstAt - b.firstAt);
     list.forEach((t, i) => { t.number = i + 1; });
     for (let i = 1; i < list.length; i++) list[i]!.prevInterrupted = list[i - 1]!.interrupted;
+    // A turn opened by harness plumbing rather than a person still answers to the last real ask.
+    let lastPrompt: PromptEvent | null = null;
+    for (const t of list) {
+      if (t.prompt) lastPrompt = t.prompt;
+      else if (!t.interrupted) t.prompt = lastPrompt;
+    }
   }
   return { turns, editsByFile, shells, agents, harnessOf };
 }

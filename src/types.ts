@@ -106,6 +106,8 @@ export interface Provenance {
   turnNumber: number;
   agentId: string;
   agentName: string | null;
+  /** The task description the parent gave a subagent; null for the main agent. */
+  agentBrief: string | null;
   prompt: { text: string; at: number };
   reasoning: { text: string; at: number } | null;
   tool: string;

@@ -66,8 +66,8 @@ describe('whyline (e2e)', () => {
     const o = io(r.dir, home);
     expect(await run([], o)).toBe(0);
     expect(o.out).toMatch(/^3 hunks across 3 files, 2 need a look: 1 untraced, 1 unrequested\n/);
-    expect(o.out).toContain('src/z.ts @@ -1 +1 @@\n  ! unrequested  prompt named src/a.ts');
-    expect(o.out).toContain('new.txt @@ -0,0 +1 @@\n  ! untraced');
+    expect(o.out).toContain('  src/z.ts @@ -1 +1 @@\n    ! unrequested  prompt named src/a.ts');
+    expect(o.out).toContain('  new.txt @@ -0,0 +1 @@\n    ! untraced');
     expect(o.out).toContain('unflagged:\n  src/a.ts  1 hunk  1 turn  72 tokens');
 
     const j = io(r.dir, home);

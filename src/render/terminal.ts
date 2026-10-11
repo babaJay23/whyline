@@ -1,6 +1,10 @@
-import type { AnnotatedDiff, AnnotatedFile, AnnotatedHunk, Usage } from '../types.js';
+import type { AnnotatedDiff, Usage } from '../types.js';
 import { FLAG_ORDER } from '../resolve/flags.js';
 import { paint } from './ansi.js';
+import { groupHunks, oneLine, plural, range, stamp, who, type Entry, type Group } from './groups.js';
+
+export const MAX_HUNK_LINES = 40;
+export const MISMATCH_NOTE = 'file differs from what the recorded edits produce; some lines were changed another way';
 
 export function fmtTokens(u: Usage | null): string {
   if (!u) return '–';
@@ -24,18 +28,14 @@ export function verdict(d: AnnotatedDiff): string {
 export function renderTerminal(d: AnnotatedDiff, opts: { color: boolean; all: boolean }): string {
   const c = paint(opts.color);
   const out: string[] = [c.bold(verdict(d)), ''];
+  const { groups, unflagged } = groupHunks(d, { all: opts.all });
 
-  const entries = d.files.flatMap((f) => f.hunks.map((h) => ({ f, h })));
-  const flagged = entries.filter((e) => e.h.flags.length > 0).sort(byWorst);
-  const rest = entries.filter((e) => e.h.flags.length === 0);
+  for (const g of groups) out.push(...groupBlock(g, c), '');
 
-  for (const { f, h } of flagged) out.push(...hunkBlock(f, h, c), '');
-  if (opts.all) {
-    for (const { f, h } of rest) out.push(...hunkBlock(f, h, c), '');
-  } else if (rest.length) {
+  if (!opts.all && unflagged.length) {
     out.push(c.dim('unflagged:'));
     for (const f of d.files) {
-      const n = f.hunks.filter((h) => h.flags.length === 0).length;
+      const n = unflagged.filter((e) => e.f === f).length;
       if (n === 0) continue;
       out.push(c.dim(`  ${f.path}  ${n} ${plural(n, 'hunk')}  ${f.turnIds.length} ${plural(f.turnIds.length, 'turn')}  ${fmtTokens(f.cost)} tokens`));
     }
@@ -44,49 +44,35 @@ export function renderTerminal(d: AnnotatedDiff, opts: { color: boolean; all: bo
   return out.join('\n');
 }
 
-export const MAX_HUNK_LINES = 40;
-export const MISMATCH_NOTE = 'file differs from what the recorded edits produce; some lines were changed another way';
-
-function hunkBlock(f: AnnotatedFile, h: AnnotatedHunk, c: ReturnType<typeof paint>): string[] {
-  const lines: string[] = [`${c.bold(f.path)} ${c.cyan(range(h))}`];
-  for (const fl of h.flags) lines.push(`  ${c.red('!')} ${c.yellow(fl.flag)}  ${fl.detail}`);
-  if (f.ledgerMismatch) lines.push(c.dim(`  ${MISMATCH_NOTE}`));
-  if (h.lead) {
-    const p = h.lead;
-    const who = p.agentId === p.sessionId ? 'main agent' : `subagent ${p.agentName ?? p.agentId}`;
-    const via = p.tool === 'shell' ? 'via shell command · ' : '';
-    lines.push(c.dim(`  turn ${p.turnNumber} · ${p.harness} · ${who} · ${via}${fmtTokens(p.turnCost)} tokens · ${stamp(p.at)}`));
+function groupBlock(g: Group, c: ReturnType<typeof paint>): string[] {
+  const lines: string[] = [];
+  const p = g.lead;
+  if (p) {
+    lines.push(c.bold(`turn ${p.turnNumber} · ${p.harness} · ${who(p)} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)} tokens`));
+    if (p.agentBrief) lines.push(`  brief: ${oneLine(p.agentBrief, 120)}`);
     lines.push(`  you asked: ${oneLine(p.prompt.text, 120)}`);
     if (p.reasoning) lines.push(c.dim(`  agent said: ${oneLine(p.reasoning.text, 160)}`));
-    if (h.otherTurns > 0) lines.push(c.dim(`  (+${h.otherTurns} other ${plural(h.otherTurns, 'turn')})`));
   } else {
-    lines.push(c.dim('  (no provenance)'));
+    lines.push(c.bold('no turn found'));
   }
-  const body = [...h.removed.map((r) => c.red(`-${r}`)), ...h.lines.map((l) => c.green(`+${l.text}`))];
-  lines.push(...body.slice(0, MAX_HUNK_LINES));
-  if (body.length > MAX_HUNK_LINES) lines.push(c.dim(`  … ${body.length - MAX_HUNK_LINES} more lines`));
+  let said = p?.reasoning?.text ?? null;
+  for (const e of g.entries) {
+    const own = e.h.lead?.reasoning?.text ?? null;
+    lines.push(...hunkBlock(e, own !== null && own !== said ? own : null, c));
+    if (own !== null) said = own;
+  }
   return lines;
 }
 
-function byWorst(a: { f: AnnotatedFile; h: AnnotatedHunk }, b: { f: AnnotatedFile; h: AnnotatedHunk }): number {
-  const w = (h: AnnotatedHunk) => Math.min(...h.flags.map((x) => FLAG_ORDER.indexOf(x.flag)));
-  return w(a.h) - w(b.h) || a.f.path.localeCompare(b.f.path) || a.h.newStart - b.h.newStart;
-}
-
-function range(h: AnnotatedHunk): string {
-  const seg = (s: number, n: number) => (n === 1 ? `${s}` : `${s},${n}`);
-  return `@@ -${seg(h.oldStart, h.oldLines)} +${seg(h.newStart, h.newLines)} @@`;
-}
-
-function stamp(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
-}
-
-function oneLine(s: string, max: number): string {
-  const t = s.replace(/\s*\n\s*/g, ' ').trim();
-  return t.length > max ? t.slice(0, max - 1) + '…' : t;
-}
-
-function plural(n: number, word: string): string {
-  return n === 1 ? word : `${word}s`;
+function hunkBlock({ f, h }: Entry, said: string | null, c: ReturnType<typeof paint>): string[] {
+  const lines: string[] = [`  ${c.bold(f.path)} ${c.cyan(range(h))}`];
+  for (const fl of h.flags) lines.push(`    ${c.red('!')} ${c.yellow(fl.flag)}  ${fl.detail}`);
+  if (f.ledgerMismatch) lines.push(c.dim(`    ${MISMATCH_NOTE}`));
+  // Only say what the agent said when it changed since the last hunk shown.
+  if (said !== null) lines.push(c.dim(`    agent said: ${oneLine(said, 160)}`));
+  if (h.otherTurns > 0) lines.push(c.dim(`    (+${h.otherTurns} other ${plural(h.otherTurns, 'turn')})`));
+  const body = [...h.removed.map((r) => c.red(`  -${r}`)), ...h.lines.map((l) => c.green(`  +${l.text}`))];
+  lines.push(...body.slice(0, MAX_HUNK_LINES));
+  if (body.length > MAX_HUNK_LINES) lines.push(c.dim(`    … ${body.length - MAX_HUNK_LINES} more lines`));
+  return lines;
 }

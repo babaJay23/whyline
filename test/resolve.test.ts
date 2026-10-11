@@ -190,6 +190,7 @@ describe('resolve', () => {
     const out = run({ diffs: [syntheticAdded('g.ts', 'g\n')], sessions: [session(evs)], baseText: () => null, headText: () => 'g\n', repo: repoOf({ 'g.ts': 'g\n' }) });
     const h = out.files[0]!.hunks[0]!;
     expect(h.lead?.agentName).toBe('helper');
+    expect(h.lead?.agentBrief).toBe('write g');
     expect(h.flags.map((f) => f.flag)).toEqual(['subagent']);
   });
 });

@@ -74,11 +74,15 @@ function oneLine(s: string, max: number): string {
   return t.length > max ? t.slice(0, max - 1) + '…' : t;
 }
 
-/** The most recent shell command whose text named the file; the likeliest culprit for an untraced change. */
+/** Commands that can change a file: redirects, in-place editors, moves, git operations that rewrite the tree. */
+const WRITES = /(^|[\s;&|(])(?:sed\s+-[a-zA-Z]*i|perl\s+-[a-zA-Z]*i|tee|mv|cp|rm|patch|git\s+(?:mv|rm|checkout|restore|apply|stash|revert|reset|merge|rebase|cherry-pick))\b|(?<![0-9&])>{1,2}\s*[^&\s]/;
+
+/** The most recent shell command that named the file and looked like it could write it; the likeliest culprit for an untraced change. */
 export function latestMention(file: string, shells: ShellEvent[]): ShellEvent | null {
   const name = basename(file);
   for (let i = shells.length - 1; i >= 0; i--) {
     const s = shells[i]!;
+    if (!WRITES.test(s.command)) continue;
     if (s.touches.some((t) => file === t || file.endsWith('/' + t) || t.endsWith('/' + file) || t === name)) return s;
   }
   return null;

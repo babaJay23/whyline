@@ -5,7 +5,7 @@ import { paint } from '../src/render/ansi.js';
 import type { AnnotatedDiff, AnnotatedHunk, Provenance } from '../src/types.js';
 
 const prov: Provenance = {
-  harness: 'claude-code', sessionId: 's1', turnId: 'p3', turnNumber: 3, agentId: 's1', agentName: null,
+  harness: 'claude-code', sessionId: 's1', turnId: 'p3', turnNumber: 3, agentId: 's1', agentName: null, agentBrief: null,
   prompt: { text: "no, don't touch the readme.\nput the docs in docs/notes.md instead", at: Date.parse('2026-10-01T10:00:08Z') },
   reasoning: { text: 'Moving the notes.', at: 0 }, tool: 'Write', editId: 'toolu_4', at: Date.parse('2026-10-01T10:00:10Z'),
   turnCost: { input: 30, output: 8, cacheRead: 1200, cacheWrite: 0 },
@@ -53,25 +53,25 @@ describe('verdict', () => {
 });
 
 describe('renderTerminal', () => {
-  it('prints flagged hunks worst-first with provenance, then an unflagged summary', () => {
+  it('groups flagged hunks by the turn that produced them, worst group first, then an unflagged summary', () => {
     const out = renderTerminal(diff, { color: false, all: false });
     expect(out).toBe([
       '3 hunks across 2 files, 2 need a look: 1 untraced, 1 unrequested, 1 after-correction',
       '',
-      'src/a.ts @@ -5,0 +6,2 @@',
-      '  ! untraced  no structured edit covers these lines',
-      '  file differs from what the recorded edits produce; some lines were changed another way',
-      '  (no provenance)',
-      '+x',
-      '+y',
+      'no turn found',
+      '  src/a.ts @@ -5,0 +6,2 @@',
+      '    ! untraced  no structured edit covers these lines',
+      '    file differs from what the recorded edits produce; some lines were changed another way',
+      '  +x',
+      '  +y',
       '',
-      'docs/notes.md @@ -0,0 +1 @@',
-      '  ! unrequested  prompt named README.md',
-      '  ! after-correction  prompt begins "no, don\'t touch the readme."',
-      '  turn 3 · claude-code · main agent · 1.2k tokens · 2026-10-01 10:00',
+      'turn 3 · claude-code · main agent · 2026-10-01 10:00 · 1.2k tokens',
       "  you asked: no, don't touch the readme. put the docs in docs/notes.md instead",
       '  agent said: Moving the notes.',
-      '+# notes',
+      '  docs/notes.md @@ -0,0 +1 @@',
+      '    ! unrequested  prompt named README.md',
+      '    ! after-correction  prompt begins "no, don\'t touch the readme."',
+      '  +# notes',
       '',
       'unflagged:',
       '  src/a.ts  1 hunk  1 turn  120 tokens',
@@ -79,12 +79,29 @@ describe('renderTerminal', () => {
     ].join('\n'));
   });
 
+  it('prints a hunk-level "agent said" only when it changes', () => {
+    const r = (t: string) => ({ ...prov, reasoning: { text: t, at: 0 } });
+    const a: AnnotatedHunk = { ...flagged, lead: r('Step one.') };
+    const b: AnnotatedHunk = { ...flagged, newStart: 5, lead: r('Step two.') };
+    const b2: AnnotatedHunk = { ...flagged, newStart: 9, lead: r('Step two.') };
+    const d = { ...diff, files: [{ ...diff.files[0]!, hunks: [a, b, b2] }] };
+    const out = renderTerminal(d, { color: false, all: false });
+    expect(out.match(/agent said: Step two\./g)).toHaveLength(1);
+    expect(out).toContain('  agent said: Step one.\n'); // the group header carries the first
+  });
+
+  it('names the subagent and its brief in the group header', () => {
+    const sub: AnnotatedHunk = { ...flagged, lead: { ...prov, agentId: 'abc', agentName: 'helper', agentBrief: 'Write the notes file' }, flags: [{ flag: 'subagent', detail: 'helper' }] };
+    const d = { ...diff, files: [{ ...diff.files[0]!, hunks: [sub] }] };
+    expect(renderTerminal(d, { color: false, all: false })).toContain('turn 3 · claude-code · subagent helper · 2026-10-01 10:00 · 1.2k tokens\n  brief: Write the notes file\n  you asked: ');
+  });
+
   it('caps long hunks and notes a file that differs from the replayed edits', () => {
     const big: AnnotatedHunk = { ...untraced, lines: Array.from({ length: 100 }, (_, i) => ({ text: `l${i}`, provenance: null })) };
     const d = { ...diff, files: [{ ...diff.files[1]!, hunks: [big] }] };
     const out = renderTerminal(d, { color: false, all: false });
-    expect(out).toContain('  file differs from what the recorded edits produce; some lines were changed another way');
-    expect(out).toContain('+l39\n  … 60 more lines\n');
+    expect(out).toContain('    file differs from what the recorded edits produce; some lines were changed another way');
+    expect(out).toContain('  +l39\n    … 60 more lines\n');
     expect(out).not.toContain('+l40');
   });
 
@@ -92,14 +109,14 @@ describe('renderTerminal', () => {
     const viaShell: AnnotatedHunk = { ...untraced, lead: { ...prov, tool: 'shell', editId: 'sh1' } };
     const d = { ...diff, files: [{ ...diff.files[1]!, hunks: [viaShell], ledgerMismatch: false }] };
     const out = renderTerminal(d, { color: false, all: false });
-    expect(out).toContain('  turn 3 · claude-code · main agent · via shell command · 1.2k tokens · 2026-10-01 10:00\n  you asked: ');
-    expect(out).not.toContain('(no provenance)');
+    expect(out).toContain('turn 3 · claude-code · main agent · 2026-10-01 10:00 · 1.2k tokens\n  you asked: ');
+    expect(out).not.toContain('no turn found');
   });
 
   it('prints every hunk with --all and no summary', () => {
     const out = renderTerminal(diff, { color: false, all: true });
-    expect(out).toContain('src/a.ts @@ -2 +2 @@\n  file differs from what the recorded edits produce; some lines were changed another way\n  turn 1 · claude-code · main agent · 120 tokens');
-    expect(out).toContain('-two\n+2\n');
+    expect(out).toContain('turn 1 · claude-code · main agent · 2026-10-01 10:00 · 120 tokens\n');
+    expect(out).toContain('  src/a.ts @@ -2 +2 @@\n    file differs from what the recorded edits produce; some lines were changed another way\n  -two\n  +2\n');
     expect(out).not.toContain('unflagged:');
   });
 

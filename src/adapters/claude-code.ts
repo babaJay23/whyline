@@ -97,7 +97,7 @@ function parseRows(rows: unknown[], sessionId: string, agentId: string | null): 
       }
       if (o.isMeta === true || o.isCompactSummary === true || agentId !== null) continue;
       const text = humanText(msg);
-      if (text === null || /^\s*<(?:local-command|command-)/.test(text)) continue; // slash-command plumbing, not the user
+      if (text === null || INJECTED.test(text)) continue; // harness plumbing, not the user
       turnId = str(o.promptId) ?? str(o.uuid) ?? turnId;
       if (text.includes('[Request interrupted by user')) {
         events.push({ kind: 'interrupt', id: `${turnId}:interrupt`, sessionId, agentId: agent, turnId, at });
@@ -147,6 +147,9 @@ function parseRows(rows: unknown[], sessionId: string, agentId: string | null): 
   }
   return events;
 }
+
+/** User rows the harness writes on the user's behalf: slash-command output, system reminders, subagent notifications. */
+const INJECTED = /^\s*<(?:local-command|command-|system-reminder|task-notification)/;
 
 function humanText(msg: Record<string, unknown> | null): string | null {
   if (!msg) return null;

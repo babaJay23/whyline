@@ -5,27 +5,28 @@ Review what an AI coding agent did before you commit it.
 `whyline` reads the session transcripts that Claude Code and Codex already write to disk, matches every changed hunk in your diff back to the prompt and edit that produced it, and tells you which hunks to look at first.
 
 ```
-$ npx whyline
+$ whyline
 3 hunks across 3 files, 2 need a look: 1 untraced, 1 unrequested
 
-TODO.md @@ -0,0 +1 @@
-  ! untraced  no structured edit covers these lines
-  (no provenance)
-+scratch notes
+no turn found
+  TODO.md @@ -0,0 +1 @@
+    ! untraced  no structured edit covers these lines
+    file differs from what the recorded edits produce; some lines were changed another way
+  +scratch notes
 
-src/config.ts @@ -1 +1 @@
-  ! unrequested  prompt named src/modes.ts
-  turn p1 · claude-code · main agent · 74.3k tokens · 2026-10-11 03:00
-  prompt: add a TRANSCRIPTION member to the enum in src/modes.ts
-  reasoning: Adding TRANSCRIPTION after TEXT_TO_SPEECH. While here, the retry count in config looks low for speech, so I'll raise it.
--export const retries = 3;
-+export const retries = 5;
+turn 1 · claude-code · main agent · 2026-10-11 03:00 · 2.3k tokens · 72.0k from cache
+  you asked: add a TRANSCRIPTION member to the enum in src/modes.ts
+  agent said: Adding TRANSCRIPTION after TEXT_TO_SPEECH. While here, the retry count in config looks low for speech, so I'll raise it.
+  src/config.ts @@ -1 +1 @@
+    ! unrequested  prompt named src/modes.ts
+  -export const retries = 3;
+  +export const retries = 5;
 
 unflagged:
-  src/modes.ts  1 hunk  1 turn  74.3k tokens
+  src/modes.ts  1 hunk  1 turn  2.3k tokens · 72.0k from cache
 ```
 
-The agent was asked for one enum member. It also changed a retry count in a file nobody mentioned, and explained why in a sentence you would have scrolled past. The `TODO.md` was written by hand. The hunk you asked for is one line in the summary.
+The agent was asked for one enum member. It also changed a retry count in a file nobody mentioned, and explained why in a sentence you would have scrolled past. `TODO.md` was written by hand, so no turn accounts for it. The hunk you actually asked for is one line in the summary at the bottom.
 
 No install, no hooks, no account. It works on sessions you ran last week.
 

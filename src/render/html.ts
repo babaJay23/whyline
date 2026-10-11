@@ -26,7 +26,7 @@ export function renderHtml(d: AnnotatedDiff): string {
 <body>
 <header>
   <h1>${esc(v)}</h1>
-  <p class="meta">${esc(d.range)} · ${d.sessions.length} session(s) · ${fmtTokens(d.totals.cost)} tokens</p>
+  <p class="meta">${esc(d.range)} · ${d.sessions.length} session(s) · ${fmtTokens(d.totals.cost)}</p>
   <p>${counts}</p>
 </header>
 <main>
@@ -43,7 +43,7 @@ ${groups.map(section).join('\n')}
 function section(g: Group): string {
   const p = g.lead;
   const head = p
-    ? `<h2>turn ${p.turnNumber} · ${p.harness} · ${esc(who(p))} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)} tokens</h2>
+    ? `<h2>turn ${p.turnNumber} · ${p.harness} · ${esc(who(p))} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)}</h2>
 ${p.agentBrief ? `<p class="ask"><b>brief</b> ${esc(p.agentBrief)}</p>` : ''}
 <details open><summary>you asked</summary><pre>${esc(p.prompt.text)}</pre></details>
 ${p.reasoning ? `<details><summary>agent said</summary><pre>${esc(p.reasoning.text)}</pre></details>` : ''}`

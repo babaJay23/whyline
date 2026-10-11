@@ -6,9 +6,18 @@ import { groupHunks, oneLine, plural, range, stamp, who, type Entry, type Group 
 export const MAX_HUNK_LINES = 40;
 export const MISMATCH_NOTE = 'file differs from what the recorded edits produce; some lines were changed another way';
 
+/**
+ * "tokens" is the work the model did fresh: input, cache writes and output.
+ * Cache reads are reported beside it; they are cheap per token but say how much
+ * context the turn was carrying.
+ */
 export function fmtTokens(u: Usage | null): string {
   if (!u) return '–';
-  const n = u.input + u.output + u.cacheRead + u.cacheWrite;
+  const fresh = `${compact(u.input + u.cacheWrite + u.output)} tokens`;
+  return u.cacheRead ? `${fresh} · ${compact(u.cacheRead)} from cache` : fresh;
+}
+
+function compact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
@@ -37,7 +46,7 @@ export function renderTerminal(d: AnnotatedDiff, opts: { color: boolean; all: bo
     for (const f of d.files) {
       const n = unflagged.filter((e) => e.f === f).length;
       if (n === 0) continue;
-      out.push(c.dim(`  ${f.path}  ${n} ${plural(n, 'hunk')}  ${f.turnIds.length} ${plural(f.turnIds.length, 'turn')}  ${fmtTokens(f.cost)} tokens`));
+      out.push(c.dim(`  ${f.path}  ${n} ${plural(n, 'hunk')}  ${f.turnIds.length} ${plural(f.turnIds.length, 'turn')}  ${fmtTokens(f.cost)}`));
     }
     out.push('');
   }
@@ -48,7 +57,7 @@ function groupBlock(g: Group, c: ReturnType<typeof paint>): string[] {
   const lines: string[] = [];
   const p = g.lead;
   if (p) {
-    lines.push(c.bold(`turn ${p.turnNumber} · ${p.harness} · ${who(p)} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)} tokens`));
+    lines.push(c.bold(`turn ${p.turnNumber} · ${p.harness} · ${who(p)} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)}`));
     if (p.agentBrief) lines.push(`  brief: ${oneLine(p.agentBrief, 120)}`);
     lines.push(`  you asked: ${oneLine(p.prompt.text, 120)}`);
     if (p.reasoning) lines.push(c.dim(`  agent said: ${oneLine(p.reasoning.text, 160)}`));

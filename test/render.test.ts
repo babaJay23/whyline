@@ -33,11 +33,12 @@ const diff: AnnotatedDiff = {
 };
 
 describe('fmtTokens', () => {
-  it('formats totals compactly', () => {
+  it('counts fresh work as tokens and reports cache reads separately', () => {
     expect(fmtTokens(null)).toBe('–');
-    expect(fmtTokens({ input: 900, output: 50, cacheRead: 0, cacheWrite: 0 })).toBe('950');
-    expect(fmtTokens({ input: 30, output: 8, cacheRead: 1200, cacheWrite: 0 })).toBe('1.2k');
-    expect(fmtTokens({ input: 1_200_000, output: 0, cacheRead: 0, cacheWrite: 0 })).toBe('1.2M');
+    expect(fmtTokens({ input: 900, output: 50, cacheRead: 0, cacheWrite: 0 })).toBe('950 tokens');
+    expect(fmtTokens({ input: 30, output: 8, cacheRead: 1200, cacheWrite: 0 })).toBe('38 tokens · 1.2k from cache');
+    expect(fmtTokens({ input: 1_000_000, output: 200_000, cacheRead: 40_900_000, cacheWrite: 0 })).toBe('1.2M tokens · 40.9M from cache');
+    expect(fmtTokens({ input: 100, output: 0, cacheRead: 0, cacheWrite: 400 })).toBe('500 tokens'); // cache writes are fresh work
   });
 });
 
@@ -65,7 +66,7 @@ describe('renderTerminal', () => {
       '  +x',
       '  +y',
       '',
-      'turn 3 · claude-code · main agent · 2026-10-01 10:00 · 1.2k tokens',
+      'turn 3 · claude-code · main agent · 2026-10-01 10:00 · 38 tokens · 1.2k from cache',
       "  you asked: no, don't touch the readme. put the docs in docs/notes.md instead",
       '  agent said: Moving the notes.',
       '  docs/notes.md @@ -0,0 +1 @@',
@@ -93,7 +94,7 @@ describe('renderTerminal', () => {
   it('names the subagent and its brief in the group header', () => {
     const sub: AnnotatedHunk = { ...flagged, lead: { ...prov, agentId: 'abc', agentName: 'helper', agentBrief: 'Write the notes file' }, flags: [{ flag: 'subagent', detail: 'helper' }] };
     const d = { ...diff, files: [{ ...diff.files[0]!, hunks: [sub] }] };
-    expect(renderTerminal(d, { color: false, all: false })).toContain('turn 3 · claude-code · subagent helper · 2026-10-01 10:00 · 1.2k tokens\n  brief: Write the notes file\n  you asked: ');
+    expect(renderTerminal(d, { color: false, all: false })).toContain('turn 3 · claude-code · subagent helper · 2026-10-01 10:00 · 38 tokens · 1.2k from cache\n  brief: Write the notes file\n  you asked: ');
   });
 
   it('caps long hunks and notes a file that differs from the replayed edits', () => {
@@ -109,7 +110,7 @@ describe('renderTerminal', () => {
     const viaShell: AnnotatedHunk = { ...untraced, lead: { ...prov, tool: 'shell', editId: 'sh1' } };
     const d = { ...diff, files: [{ ...diff.files[1]!, hunks: [viaShell], ledgerMismatch: false }] };
     const out = renderTerminal(d, { color: false, all: false });
-    expect(out).toContain('turn 3 · claude-code · main agent · 2026-10-01 10:00 · 1.2k tokens\n  you asked: ');
+    expect(out).toContain('turn 3 · claude-code · main agent · 2026-10-01 10:00 · 38 tokens · 1.2k from cache\n  you asked: ');
     expect(out).not.toContain('no turn found');
   });
 

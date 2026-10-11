@@ -5,7 +5,7 @@ import { paint } from '../src/render/ansi.js';
 import type { AnnotatedDiff, AnnotatedHunk, Provenance } from '../src/types.js';
 
 const prov: Provenance = {
-  harness: 'claude-code', sessionId: 's1', turnId: 'p3', agentId: 's1', agentName: null,
+  harness: 'claude-code', sessionId: 's1', turnId: 'p3', turnNumber: 3, agentId: 's1', agentName: null,
   prompt: { text: "no, don't touch the readme.\nput the docs in docs/notes.md instead", at: Date.parse('2026-10-01T10:00:08Z') },
   reasoning: { text: 'Moving the notes.', at: 0 }, tool: 'Write', editId: 'toolu_4', at: Date.parse('2026-10-01T10:00:10Z'),
   turnCost: { input: 30, output: 8, cacheRead: 1200, cacheWrite: 0 },
@@ -15,8 +15,8 @@ const flagged: AnnotatedHunk = {
   lead: prov, otherTurns: 0, flags: [{ flag: 'unrequested', detail: 'prompt named README.md' }, { flag: 'after-correction', detail: 'prompt begins "no, don\'t touch the readme."' }],
 };
 const plain: AnnotatedHunk = {
-  oldStart: 2, oldLines: 1, newStart: 2, newLines: 1, removed: ['two'], lines: [{ text: '2', provenance: { ...prov, turnId: 'p1', turnCost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 } } }],
-  lead: { ...prov, turnId: 'p1', turnCost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 } }, otherTurns: 0, flags: [],
+  oldStart: 2, oldLines: 1, newStart: 2, newLines: 1, removed: ['two'], lines: [{ text: '2', provenance: { ...prov, turnId: 'p1', turnNumber: 1, turnCost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 } } }],
+  lead: { ...prov, turnId: 'p1', turnNumber: 1, turnCost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 } }, otherTurns: 0, flags: [],
 };
 const untraced: AnnotatedHunk = {
   oldStart: 5, oldLines: 0, newStart: 6, newLines: 2, removed: [], lines: [{ text: 'x', provenance: null }, { text: 'y', provenance: null }],
@@ -68,9 +68,9 @@ describe('renderTerminal', () => {
       'docs/notes.md @@ -0,0 +1 @@',
       '  ! unrequested  prompt named README.md',
       '  ! after-correction  prompt begins "no, don\'t touch the readme."',
-      '  turn p3 · claude-code · main agent · 1.2k tokens · 2026-10-01 10:00',
-      "  prompt: no, don't touch the readme. put the docs in docs/notes.md instead",
-      '  reasoning: Moving the notes.',
+      '  turn 3 · claude-code · main agent · 1.2k tokens · 2026-10-01 10:00',
+      "  you asked: no, don't touch the readme. put the docs in docs/notes.md instead",
+      '  agent said: Moving the notes.',
       '+# notes',
       '',
       'unflagged:',
@@ -88,9 +88,17 @@ describe('renderTerminal', () => {
     expect(out).not.toContain('+l40');
   });
 
+  it('labels a lead that came from a shell command rather than a structured edit', () => {
+    const viaShell: AnnotatedHunk = { ...untraced, lead: { ...prov, tool: 'shell', editId: 'sh1' } };
+    const d = { ...diff, files: [{ ...diff.files[1]!, hunks: [viaShell], ledgerMismatch: false }] };
+    const out = renderTerminal(d, { color: false, all: false });
+    expect(out).toContain('  turn 3 · claude-code · main agent · via shell command · 1.2k tokens · 2026-10-01 10:00\n  you asked: ');
+    expect(out).not.toContain('(no provenance)');
+  });
+
   it('prints every hunk with --all and no summary', () => {
     const out = renderTerminal(diff, { color: false, all: true });
-    expect(out).toContain('src/a.ts @@ -2 +2 @@\n  file differs from what the recorded edits produce; some lines were changed another way\n  turn p1 · claude-code · main agent · 120 tokens');
+    expect(out).toContain('src/a.ts @@ -2 +2 @@\n  file differs from what the recorded edits produce; some lines were changed another way\n  turn 1 · claude-code · main agent · 120 tokens');
     expect(out).toContain('-two\n+2\n');
     expect(out).not.toContain('unflagged:');
   });

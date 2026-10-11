@@ -54,9 +54,10 @@ function hunkBlock(f: AnnotatedFile, h: AnnotatedHunk, c: ReturnType<typeof pain
   if (h.lead) {
     const p = h.lead;
     const who = p.agentId === p.sessionId ? 'main agent' : `subagent ${p.agentName ?? p.agentId}`;
-    lines.push(c.dim(`  turn ${p.turnId} · ${p.harness} · ${who} · ${fmtTokens(p.turnCost)} tokens · ${stamp(p.at)}`));
-    lines.push(`  prompt: ${oneLine(p.prompt.text, 120)}`);
-    if (p.reasoning) lines.push(c.dim(`  reasoning: ${oneLine(p.reasoning.text, 160)}`));
+    const via = p.tool === 'shell' ? 'via shell command · ' : '';
+    lines.push(c.dim(`  turn ${p.turnNumber} · ${p.harness} · ${who} · ${via}${fmtTokens(p.turnCost)} tokens · ${stamp(p.at)}`));
+    lines.push(`  you asked: ${oneLine(p.prompt.text, 120)}`);
+    if (p.reasoning) lines.push(c.dim(`  agent said: ${oneLine(p.reasoning.text, 160)}`));
     if (h.otherTurns > 0) lines.push(c.dim(`  (+${h.otherTurns} other ${plural(h.otherTurns, 'turn')})`));
   } else {
     lines.push(c.dim('  (no provenance)'));

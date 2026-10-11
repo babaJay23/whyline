@@ -54,9 +54,9 @@ function hunk(f: AnnotatedFile, h: AnnotatedHunk, id: string): string {
   const p = h.lead;
   const who = p ? (p.agentId === p.sessionId ? 'main agent' : `subagent ${p.agentName ?? p.agentId}`) : '';
   const prov = p
-    ? `<p class="prov">turn ${esc(p.turnId)} · ${p.harness} · ${esc(who)} · ${fmtTokens(p.turnCost)} tokens · ${new Date(p.at).toISOString().slice(0, 16).replace('T', ' ')}${h.otherTurns ? ` · +${h.otherTurns} other turn(s)` : ''}</p>
-<details open><summary>prompt</summary><pre>${esc(p.prompt.text)}</pre></details>
-${p.reasoning ? `<details><summary>reasoning</summary><pre>${esc(p.reasoning.text)}</pre></details>` : ''}`
+    ? `<p class="prov">turn ${p.turnNumber} · ${p.harness} · ${esc(who)} · ${p.tool === 'shell' ? 'via shell command · ' : ''}${fmtTokens(p.turnCost)} tokens · ${new Date(p.at).toISOString().slice(0, 16).replace('T', ' ')}${h.otherTurns ? ` · +${h.otherTurns} other turn(s)` : ''}</p>
+<details open><summary>you asked</summary><pre>${esc(p.prompt.text)}</pre></details>
+${p.reasoning ? `<details><summary>agent said</summary><pre>${esc(p.reasoning.text)}</pre></details>` : ''}`
     : '<p class="prov">no provenance</p>';
   const code = [...h.removed.map((r) => `<span class="del">-${esc(r)}</span>`), ...h.lines.map((l) => `<span class="add">+${esc(l.text)}</span>`)].join('\n');
   const seg = (s: number, n: number) => (n === 1 ? `${s}` : `${s},${n}`);

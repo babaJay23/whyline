@@ -17,7 +17,7 @@ const repo: RepoFiles = {
 
 function prov(over: Partial<Provenance> = {}): Provenance {
   return {
-    harness: 'claude-code', sessionId: 's1', turnId: 't1', agentId: 's1', agentName: null,
+    harness: 'claude-code', sessionId: 's1', turnId: 't1', turnNumber: 1, agentId: 's1', agentName: null,
     prompt: { text: 'change src/a.ts', at: 100 }, reasoning: null, tool: 'Edit', editId: 'e1', at: 100, turnCost: null, ...over,
   };
 }
@@ -70,9 +70,9 @@ describe('flagHunk', () => {
     });
     const hits = flagHunk(f);
     expect(hits[0]!.flag).toBe('untraced');
-    expect(hits[0]!.detail).toContain('turn t9');
+    expect(hits[0]!.detail).toContain('s/x/y/ src/a.ts');
     const later = { ...f.shells[0]!, id: 'sh2', turnId: 't12', at: 90, command: 'python3 fix.py src/a.ts' };
-    expect(flagHunk({ ...f, shells: [f.shells[0]!, later] })[0]!.detail).toContain('turn t12'); // the most recent mention is the likely culprit
+    expect(flagHunk({ ...f, shells: [f.shells[0]!, later] })[0]!.detail).toContain('fix.py'); // the most recent mention is the likely culprit
     expect(flagHunk(facts({ lines: [{ text: 'b', provenance: null }] }))[0]!.detail).toBe('no structured edit covers these lines');
   });
 

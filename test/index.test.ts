@@ -41,6 +41,7 @@ describe('indexEvents', () => {
     expect(p2.interrupted).toBe(true);
     const p3 = ix.turns.get(turnKey('sess-1', 'p3'))!;
     expect(p3.prevInterrupted).toBe(true);
+    expect([p1.number, p2.number, p3.number]).toEqual([1, 2, 3]);
     expect(p1.prevInterrupted).toBe(false);
     expect(ix.turns.get(turnKey('cx-1', 'ct2'))!.interrupted).toBe(true);
   });

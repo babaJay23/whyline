@@ -97,7 +97,7 @@ describe('whyline (e2e)', () => {
     const o = io(r.dir, home);
     expect(await run([`${base}..${head}`, '--all'], o)).toBe(0);
     expect(o.out).toContain('1 hunk across 1 file, nothing flagged');
-    expect(o.out).toContain('prompt: edit f.txt');
+    expect(o.out).toContain('you asked: edit f.txt');
 
     const miss = io(r.dir, home);
     expect(await run([`${base}..${head}`, '--session', 'nope'], miss)).toBe(3);
@@ -123,7 +123,7 @@ describe('whyline (e2e)', () => {
     const o = io(r.dir, home);
     expect(await run(['main...work', '--all'], o)).toBe(0);
     expect(o.out).toContain('1 hunk across 1 file, nothing flagged');
-    expect(o.out).toContain('prompt: edit f.txt');
+    expect(o.out).toContain('you asked: edit f.txt');
   });
 
   it('skips untracked binary files', async () => {

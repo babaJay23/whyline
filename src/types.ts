@@ -102,6 +102,8 @@ export interface Provenance {
   harness: Harness;
   sessionId: string;
   turnId: string;
+  /** 1-based position of the turn within its session; what people read. */
+  turnNumber: number;
   agentId: string;
   agentName: string | null;
   prompt: { text: string; at: number };

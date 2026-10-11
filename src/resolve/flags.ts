@@ -30,10 +30,9 @@ export function flagHunk(f: HunkFacts): FlagHit[] {
   const hits: FlagHit[] = [];
   const push = (flag: Flag, detail: string) => hits.push({ flag, detail });
 
-  if (f.lines.some((l) => l.provenance === null) || (f.lines.length === 0 && f.lead === null)) {
-    const mentions = (s: ShellEvent) => s.touches.some((t) => f.file === t || f.file.endsWith('/' + t) || t.endsWith('/' + f.file) || t === basename(f.file));
-    const sh = [...f.shells].reverse().find(mentions); // the latest mention is the likeliest culprit
-    push('untraced', sh ? `shell in turn ${sh.turnId} mentioned this file: ${sh.command.slice(0, 60)}` : 'no structured edit covers these lines');
+  if (f.lines.some((l) => l.provenance === null) || (f.lines.length === 0 && (f.lead === null || f.lead.tool === 'shell'))) {
+    const sh = latestMention(f.file, f.shells);
+    push('untraced', sh ? `no structured edit; a shell command touched this file: ${oneLine(sh.command, 70)}` : 'no structured edit covers these lines');
   }
 
   const promptText = f.turn?.prompt?.text ?? null;
@@ -68,6 +67,21 @@ export function flagHunk(f: HunkFacts): FlagHit[] {
   }
 
   return hits.sort((a, b) => FLAG_ORDER.indexOf(a.flag) - FLAG_ORDER.indexOf(b.flag));
+}
+
+function oneLine(s: string, max: number): string {
+  const t = s.replace(/\s+/g, ' ').trim();
+  return t.length > max ? t.slice(0, max - 1) + '…' : t;
+}
+
+/** The most recent shell command whose text named the file; the likeliest culprit for an untraced change. */
+export function latestMention(file: string, shells: ShellEvent[]): ShellEvent | null {
+  const name = basename(file);
+  for (let i = shells.length - 1; i >= 0; i--) {
+    const s = shells[i]!;
+    if (s.touches.some((t) => file === t || file.endsWith('/' + t) || t.endsWith('/' + file) || t === name)) return s;
+  }
+  return null;
 }
 
 /** Lines an edit actually wrote: context lines carried for uniqueness do not count. */

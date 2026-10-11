@@ -44,7 +44,7 @@ describe('resolve', () => {
     const [hunk] = file!.hunks;
     expect(hunk!.lines).toHaveLength(1);
     const p = hunk!.lines[0]!.provenance!;
-    expect(p).toMatchObject({ harness: 'claude-code', sessionId: 's1', turnId: 't1', agentId: 's1', agentName: null, tool: 'Edit', editId: 'e1', at: 220 });
+    expect(p).toMatchObject({ harness: 'claude-code', sessionId: 's1', turnId: 't1', turnNumber: 1, agentId: 's1', agentName: null, tool: 'Edit', editId: 'e1', at: 220 });
     expect(p.prompt.text).toBe('change two to 2 in a.ts');
     expect(p.reasoning?.text).toBe('Replacing two with 2.');
     expect(p.turnCost).toEqual({ input: 10, output: 5, cacheRead: 0, cacheWrite: 0 });
@@ -131,6 +131,25 @@ describe('resolve', () => {
     expect(n!.hunks[0]!.lead).toMatchObject({ harness: 'codex', sessionId: 's2', turnCost: { input: 7, output: 7, cacheRead: 0, cacheWrite: 0 } });
     expect(n!.hunks[0]!.lead?.prompt.text).toBe('write n.ts');
     expect(out.totals.cost).toEqual({ input: 17, output: 12, cacheRead: 0, cacheWrite: 0 });
+  });
+
+  it('shows the turn of the shell command that touched an untraced file, without attributing its lines', () => {
+    const evs: Event[] = [
+      { kind: 'prompt', id: 'p1', ...base, turnId: 't1', at: 200, text: 'write the cli entry point' },
+      { kind: 'reasoning', id: 'r1', ...base, turnId: 't1', at: 205, text: 'Writing src/cli.ts with a heredoc.', visible: true },
+      { kind: 'shell', id: 'sh1', ...base, turnId: 't1', at: 210, command: "cat > src/cli.ts <<'EOF'\nmain()\nEOF", touches: ['src/cli.ts'] },
+      { kind: 'usage', id: 'u1', ...base, turnId: 't1', at: 220, input: 9, output: 9, cacheRead: 0, cacheWrite: 0 },
+      { kind: 'shell', id: 'sh0', ...base, turnId: 't0', at: 50, command: 'touch src/cli.ts', touches: ['src/cli.ts'] }, // before the window
+    ];
+    const out = run({ diffs: [syntheticAdded('src/cli.ts', 'main()\n')], sessions: [session(evs)], baseText: () => null, headText: () => 'main()\n', repo: repoOf({ 'src/cli.ts': 'main()\n' }) });
+    const h = out.files[0]!.hunks[0]!;
+    expect(h.lines[0]!.provenance).toBeNull();
+    expect(h.flags.map((f) => f.flag)).toEqual(['untraced']);
+    expect(h.flags[0]!.detail).toContain('cat > src/cli.ts');
+    expect(h.lead).toMatchObject({ tool: 'shell', editId: 'sh1', turnId: 't1', turnCost: { input: 9, output: 9, cacheRead: 0, cacheWrite: 0 } });
+    expect(h.lead?.prompt.text).toBe('write the cli entry point');
+    expect(h.lead?.reasoning?.text).toBe('Writing src/cli.ts with a heredoc.');
+    expect(out.files[0]!.cost).toEqual({ input: 9, output: 9, cacheRead: 0, cacheWrite: 0 });
   });
 
   it('flags a deletion no edit accounts for, and credits one the agent made', () => {

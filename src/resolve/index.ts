@@ -11,6 +11,7 @@ export interface Turn {
   interrupted: boolean;
   prevInterrupted: boolean;
   firstAt: number;
+  number: number; // 1-based within the session, by time
 }
 
 export interface EventIndex {
@@ -51,7 +52,7 @@ export function indexEvents(sessions: Session[], repoRoot: string): EventIndex {
       const key = turnKey(ref.id, id);
       let t = turns.get(key);
       if (!t) {
-        t = { id, sessionId: ref.id, harness: ref.harness, prompt: null, reasoning: [], usage: null, interrupted: false, prevInterrupted: false, firstAt: at };
+        t = { id, sessionId: ref.id, harness: ref.harness, prompt: null, reasoning: [], usage: null, interrupted: false, prevInterrupted: false, firstAt: at, number: 0 };
         turns.set(key, t);
       }
       if (at < t.firstAt) t.firstAt = at;
@@ -87,6 +88,7 @@ export function indexEvents(sessions: Session[], repoRoot: string): EventIndex {
   }
   for (const list of bySession.values()) {
     list.sort((a, b) => a.firstAt - b.firstAt);
+    list.forEach((t, i) => { t.number = i + 1; });
     for (let i = 1; i < list.length; i++) list[i]!.prevInterrupted = list[i - 1]!.interrupted;
   }
   return { turns, editsByFile, shells, agents, harnessOf };

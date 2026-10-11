@@ -3,7 +3,8 @@ import { ZERO_USAGE, addUsage } from '../types.js';
 import { replay, tableText } from '../ledger/ledger.js';
 import { indexEvents, selectEdits, turnKey, type EventIndex, type Turn } from './index.js';
 import { splitLines } from '../lines.js';
-import { FLAG_ORDER, flagHunk, type RepoFiles } from './flags.js';
+import { FLAG_ORDER, flagHunk, latestMention, type RepoFiles } from './flags.js';
+import type { ShellEvent } from '../types.js';
 
 export interface ResolveInput {
   repoRoot: string;
@@ -28,9 +29,7 @@ export function resolve(input: ResolveInput): AnnotatedDiff {
     for (const h of f.hunks) {
       hunks++;
       for (const hit of h.flags) flagged[hit.flag]++;
-      for (const l of h.lines) {
-        const p = l.provenance;
-        if (!p) continue;
+      for (const p of hunkProvenance(h)) {
         const key = turnKey(p.sessionId, p.turnId);
         if (costedTurns.has(key)) continue;
         costedTurns.add(key);
@@ -49,17 +48,25 @@ export function resolve(input: ResolveInput): AnnotatedDiff {
   };
 }
 
+/** Every turn a hunk points at: its traced lines plus a lead derived from a removal or shell command. */
+function hunkProvenance(h: AnnotatedHunk): Provenance[] {
+  const out = h.lines.map((l) => l.provenance).filter((p): p is Provenance => p !== null);
+  if (h.lead) out.push(h.lead);
+  return out;
+}
+
 function resolveFile(d: FileDiff, ix: EventIndex, input: ResolveInput): AnnotatedFile {
   const edits = selectEdits(ix.editsByFile.get(d.path) ?? [], input.window);
+  const shells = ix.shells.filter((s) => s.at > input.window.from && s.at <= input.window.to);
   const base = d.status === 'added' ? null : input.baseText(d.oldPath ?? d.path);
   const table = replay(base, edits);
   const actual = d.status === 'deleted' ? '' : input.headText(d.path) ?? '';
   const ledgerMismatch = normalize(tableText(table)) !== normalize(actual);
 
   const used = new Set<number>();
-  const hunks = d.hunks.map((h) => resolveHunk(h, d.path, table, edits, ix, input.repo, used));
+  const hunks = d.hunks.map((h) => resolveHunk(h, d.path, table, edits, shells, ix, input.repo, used));
   const keys = new Map<string, string>();
-  for (const h of hunks) for (const l of h.lines) if (l.provenance) keys.set(turnKey(l.provenance.sessionId, l.provenance.turnId), l.provenance.turnId);
+  for (const h of hunks) for (const p of hunkProvenance(h)) keys.set(turnKey(p.sessionId, p.turnId), p.turnId);
   let cost: Usage | null = null;
   for (const key of keys.keys()) {
     const u = ix.turns.get(key)?.usage;
@@ -75,7 +82,7 @@ const NEAR = 3;
  * single matching line within NEAR of it. A duplicate typed by hand therefore
  * stays untraced instead of borrowing the agent's receipt.
  */
-function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEvent[], ix: EventIndex, repo: RepoFiles, used: Set<number>): AnnotatedHunk {
+function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEvent[], shells: ShellEvent[], ix: EventIndex, repo: RepoFiles, used: Set<number>): AnnotatedHunk {
   const lines: AnnotatedLine[] = h.added.map((text, i) => {
     const want = strip(text);
     const at = h.newStart - 1 + i;
@@ -95,11 +102,11 @@ function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEve
     return { text, provenance: edit ? provenance(edit, ix) : null };
   });
 
-  const lead = pickLead(lines) ?? (h.added.length === 0 ? removalLead(h.removed, fileEdits, ix) : null);
+  const lead = pickLead(lines) ?? (h.added.length === 0 ? removalLead(h.removed, fileEdits, ix) : null) ?? shellLead(file, shells, ix);
   const turnIds = new Set(lines.filter((l) => l.provenance).map((l) => turnKey(l.provenance!.sessionId, l.provenance!.turnId)));
   const otherTurns = Math.max(0, turnIds.size - (lead ? 1 : 0));
   const turn: Turn | null = lead ? ix.turns.get(turnKey(lead.sessionId, lead.turnId)) ?? null : null;
-  const flags = flagHunk({ file, lines, lead, turn, table, fileEdits, shells: ix.shells, repo });
+  const flags = flagHunk({ file, lines, lead, turn, table, fileEdits, shells, repo });
 
   return { oldStart: h.oldStart, oldLines: h.oldLines, newStart: h.newStart, newLines: h.newLines, removed: h.removed, lines, lead, otherTurns, flags };
 }
@@ -118,7 +125,16 @@ function removalLead(removed: string[], fileEdits: EditEvent[], ix: EventIndex):
   return null;
 }
 
-function provenance(e: EditEvent, ix: EventIndex): Provenance {
+/**
+ * No structured edit covers the hunk, but a shell command in the window named the
+ * file. Its turn is the best available context; the lines themselves stay untraced.
+ */
+function shellLead(file: string, shells: ShellEvent[], ix: EventIndex): Provenance | null {
+  const sh = latestMention(file, shells);
+  return sh ? provenance({ ...sh, tool: 'shell' }, ix) : null;
+}
+
+function provenance(e: { id: string; sessionId: string; agentId: string; turnId: string; at: number; tool: string }, ix: EventIndex): Provenance {
   const turn = ix.turns.get(turnKey(e.sessionId, e.turnId));
   const before = turn?.reasoning.filter((r) => r.at <= e.at) ?? [];
   const reasoning = before.filter((r) => r.visible).at(-1) ?? before.at(-1) ?? null;
@@ -127,6 +143,7 @@ function provenance(e: EditEvent, ix: EventIndex): Provenance {
     harness: ix.harnessOf.get(e.sessionId) ?? 'claude-code',
     sessionId: e.sessionId,
     turnId: e.turnId,
+    turnNumber: turn?.number ?? 0,
     agentId: e.agentId,
     agentName,
     prompt: turn?.prompt ? { text: turn.prompt.text, at: turn.prompt.at } : { text: '', at: turn?.firstAt ?? e.at },

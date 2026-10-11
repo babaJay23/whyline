@@ -139,6 +139,31 @@ describe('whyline (e2e)', () => {
     expect(JSON.parse(o.out).files.map((f: { path: string }) => f.path)).toEqual(['notes.txt']);
   });
 
+  it('reports an unwritable --html path in one line and writes both outputs when --json is also given', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now(), 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    r.write('f.txt', 'b\n');
+    const bad = io(r.dir, home);
+    expect(await run(['--html', home], bad)).toBe(1); // a directory, not a file
+    expect(bad.err).toMatch(/^whyline: cannot write .*\n$/);
+    expect(bad.err).not.toContain('    at ');
+    const both = io(r.dir, home);
+    const report = join(home, 'both.html');
+    expect(await run(['--json', '--html', report], both)).toBe(0);
+    expect(JSON.parse(both.out).schemaVersion).toBe(1);
+    expect(existsSync(report)).toBe(true);
+  });
+
+  it('explains a repository with no commits', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    const o = io(r.dir, r.dir);
+    expect(await run([], o)).toBe(1);
+    expect(o.err).toBe('whyline: this repository has no commits yet\n');
+  });
+
   it('lists sessions and runs doctor', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     r.commit('base');

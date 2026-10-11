@@ -20,6 +20,11 @@ describe('findSessions', () => {
     expect(all).toHaveLength(2);
   });
 
+  it('selects every session with all: true', async () => {
+    const { selected } = await findSessions('/repo', HOME, { all: true });
+    expect(selected.map((s) => s.ref.id)).toEqual(['cx-1', 'sess-1']);
+  });
+
   it('selects by id prefix and ignores the window when ids are given', async () => {
     const { selected } = await findSessions('/repo', HOME, { window: { from: 0, to: 1 }, ids: ['cx'] });
     expect(selected.map((s) => s.ref.id)).toEqual(['cx-1']);

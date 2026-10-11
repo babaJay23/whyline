@@ -37,6 +37,13 @@ describe('renderHtml', () => {
     expect(html).not.toContain('<link');
   });
 
+  it('gives every hunk a unique id and links each file to its first rendered hunk', () => {
+    const ids = [...html.matchAll(/<article class="hunk" id="([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const href of [...html.matchAll(/<a href="#([^"]+)"/g)].map((m) => m[1])) expect(ids).toContain(href);
+    expect(html).not.toMatch(/id="[^"]*[<>#\s][^"]*"/);
+  });
+
   it('renders flag chips and keeps unflagged hunks collapsed', () => {
     expect(html).toContain('class="chip untraced"');
     expect(html).toMatch(/<details class="unflagged">\s*<summary>/);

@@ -36,8 +36,9 @@ describe('resolve', () => {
     });
 
   it('attributes a changed line to the edit, prompt, reasoning and cost of its turn', () => {
-    const out = run();
+    const out = run({ now: 12345 });
     expect(out.schemaVersion).toBe(1);
+    expect(out.generatedAt).toBe(12345);
     const [file] = out.files;
     expect(file!.path).toBe('a.ts');
     const [hunk] = file!.hunks;

@@ -35,23 +35,31 @@ No install, no hooks, no account. It works on sessions you ran last week.
 |---|---|
 | `untraced` | no structured edit in any session accounts for these lines. Hand edits, shell edits (`sed`, heredocs), or a session whyline could not find. |
 | `unrequested` | your prompt named specific files and this is not one of them, nor imported by one. Only raised when the prompt named a file. |
-| `after-correction` | written in a turn that started with "no", "don't", "revert", "wrong", "instead"… or right after you interrupted the agent. |
+| `after-correction` | written in a turn whose prompt opens with "no", "stop" or "undo", or says "don't", "revert", "wrong" or "instead" in its first 80 characters, or that came right after you interrupted the agent. |
 | `drifted` | an earlier edit in this file did not match when replayed, so attribution after it is best-effort. |
 | `churned` | the same lines were rewritten across three or more turns. |
 | `subagent` | written by a spawned agent whose reasoning you never saw directly. |
 
 Every flag is a plain rule over the transcript and the diff. No model is called. When whyline cannot prove where a line came from, it says `untraced` instead of guessing.
 
+## Install
+
+```
+npm i -g whyline
+```
+
+Or run it without installing: `npx whyline`.
+
 ## Usage
 
 ```
-npx whyline                  # working tree vs HEAD, flagged hunks first
-npx whyline --all            # every hunk
-npx whyline main..HEAD       # any git range
-npx whyline --html out.html  # self-contained report
-npx whyline --json           # everything, for scripts
-npx whyline sessions         # which sessions it found for this repo
-npx whyline doctor           # what it can and cannot see on this machine
+whyline                      # working tree vs HEAD, flagged hunks first
+whyline --all                # every hunk
+whyline main..HEAD           # any git range
+whyline --html out.html      # self-contained report
+whyline --json               # everything, for scripts
+whyline sessions             # which sessions it found for this repo
+whyline doctor               # what it can and cannot see on this machine
 ```
 
 Sessions are matched to the repo by their working directory and to the diff by time. `--since 7d` and `--session <id>` override that.

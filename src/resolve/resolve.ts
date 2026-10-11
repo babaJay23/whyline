@@ -2,7 +2,7 @@ import type { AnnotatedDiff, AnnotatedFile, AnnotatedHunk, AnnotatedLine, EditEv
 import { ZERO_USAGE, addUsage } from '../types.js';
 import { replay, tableText } from '../ledger/ledger.js';
 import { indexEvents, selectEdits, turnKey, type EventIndex, type Turn } from './index.js';
-import { splitLines } from './diff.js';
+import { splitLines } from '../lines.js';
 import { FLAG_ORDER, flagHunk, type RepoFiles } from './flags.js';
 
 export interface ResolveInput {
@@ -14,6 +14,7 @@ export interface ResolveInput {
   baseText(path: string): string | null;
   headText(path: string): string | null;
   repo: RepoFiles;
+  now?: number;
 }
 
 export function resolve(input: ResolveInput): AnnotatedDiff {
@@ -41,7 +42,7 @@ export function resolve(input: ResolveInput): AnnotatedDiff {
   return {
     schemaVersion: 1,
     range: input.range,
-    generatedAt: Date.now(),
+    generatedAt: input.now ?? Date.now(),
     sessions: input.sessions.map((s) => s.ref),
     files,
     totals: { files: files.length, hunks, flagged, cost },

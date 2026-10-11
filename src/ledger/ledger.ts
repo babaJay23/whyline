@@ -1,5 +1,5 @@
 import type { EditEvent, LedgerLine, LineTable } from '../types.js';
-import { splitLines } from '../resolve/diff.js';
+import { splitLines } from '../lines.js';
 
 export function replay(base: string | null, edits: EditEvent[]): LineTable {
   let lines: LedgerLine[] = splitLines(base ?? '').map((text) => ({ text, editId: null }));

@@ -1,17 +1,9 @@
-import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Adapter, Event, SessionRef } from '../types.js';
 import { parseApplyPatch } from './apply-patch.js';
 import { readJsonl, firstLine, obj, str, num } from './jsonl.js';
-import { pathTokens } from './claude-code.js';
-
-function real(p: string): string {
-  try { return realpathSync(p); } catch { return p; }
-}
-function inside(root: string, cwd: string): boolean {
-  const r = real(root), c = real(cwd);
-  return c === r || c.startsWith(r.endsWith('/') ? r : r + '/');
-}
+import { inside, pathTokens } from './common.js';
 
 function* walk(dir: string): Generator<string> {
   for (const e of readdirSync(dir, { withFileTypes: true })) {

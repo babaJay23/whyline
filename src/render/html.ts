@@ -4,20 +4,23 @@ import { MISMATCH_NOTE, fmtTokens, verdict } from './terminal.js';
 
 export function renderHtml(d: AnnotatedDiff): string {
   const v = verdict(d);
-  const entries = d.files.flatMap((f) => f.hunks.map((h) => ({ f, h })));
+  const entries = d.files.flatMap((f, fi) => f.hunks.map((h, hi) => ({ f, h, id: `h-${fi}-${hi}` })));
   const flagged = entries.filter((e) => e.h.flags.length > 0).sort((a, b) => worst(a.h) - worst(b.h) || a.f.path.localeCompare(b.f.path) || a.h.newStart - b.h.newStart);
+  const rest = entries.filter((e) => e.h.flags.length === 0);
 
   const counts = FLAG_ORDER.filter((f) => d.totals.flagged[f] > 0).map((f) => `<span class="chip ${f}">${d.totals.flagged[f]} ${f}</span>`).join(' ');
   const fileList = d.files.map((f) => {
     const n = f.hunks.filter((h) => h.flags.length).length;
-    return `<li><a href="#f-${esc(f.path)}">${esc(f.path)}</a>${n ? ` <span class="count">${n}</span>` : ''}</li>`;
+    const first = [...flagged, ...rest].find((e) => e.f === f);
+    const name = first ? `<a href="#${first.id}">${esc(f.path)}</a>` : esc(f.path);
+    return `<li>${name}${n ? ` <span class="count">${n}</span>` : ''}</li>`;
   }).join('\n');
 
-  const flaggedHtml = flagged.map(({ f, h }) => hunk(f, h)).join('\n');
+  const flaggedHtml = flagged.map(({ f, h, id }) => hunk(f, h, id)).join('\n');
   const unflaggedHtml = d.files.map((f) => {
-    const rest = f.hunks.filter((h) => h.flags.length === 0);
-    if (!rest.length) return '';
-    return `<details class="unflagged"><summary>${esc(f.path)} · ${rest.length} unflagged · ${f.turnIds.length} turn(s) · ${fmtTokens(f.cost)} tokens</summary>\n${rest.map((h) => hunk(f, h)).join('\n')}\n</details>`;
+    const mine = rest.filter((e) => e.f === f);
+    if (!mine.length) return '';
+    return `<details class="unflagged"><summary>${esc(f.path)} · ${mine.length} unflagged · ${f.turnIds.length} turn(s) · ${fmtTokens(f.cost)} tokens</summary>\n${mine.map(({ h, id }) => hunk(f, h, id)).join('\n')}\n</details>`;
   }).join('\n');
 
   return `<!doctype html>
@@ -46,7 +49,7 @@ ${unflaggedHtml}
 `;
 }
 
-function hunk(f: AnnotatedFile, h: AnnotatedHunk): string {
+function hunk(f: AnnotatedFile, h: AnnotatedHunk, id: string): string {
   const chips = h.flags.map((x) => `<span class="chip ${x.flag}" title="${esc(x.detail)}">${x.flag}</span> <span class="detail">${esc(x.detail)}</span>`).join('<br>');
   const p = h.lead;
   const who = p ? (p.agentId === p.sessionId ? 'main agent' : `subagent ${p.agentName ?? p.agentId}`) : '';
@@ -57,7 +60,7 @@ ${p.reasoning ? `<details><summary>reasoning</summary><pre>${esc(p.reasoning.tex
     : '<p class="prov">no provenance</p>';
   const code = [...h.removed.map((r) => `<span class="del">-${esc(r)}</span>`), ...h.lines.map((l) => `<span class="add">+${esc(l.text)}</span>`)].join('\n');
   const seg = (s: number, n: number) => (n === 1 ? `${s}` : `${s},${n}`);
-  return `<article class="hunk" id="f-${esc(f.path)}">
+  return `<article class="hunk" id="${id}">
 <h2>${esc(f.path)} <code>@@ -${seg(h.oldStart, h.oldLines)} +${seg(h.newStart, h.newLines)} @@</code></h2>
 ${chips ? `<p class="flags">${chips}</p>` : ''}
 ${f.ledgerMismatch ? `<p class="prov">${MISMATCH_NOTE}</p>` : ''}

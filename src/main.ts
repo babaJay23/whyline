@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util';
 import { writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { adapters } from './adapters/index.js';
-import { commitTime, diffText, lsFiles, mergeBase, parseRange, readWorkingFile, repoRoot, show, untracked } from './git.js';
+import { commitTime, diffText, hasCommits, lsFiles, mergeBase, parseRange, readWorkingFile, repoRoot, show, untracked } from './git.js';
 import { renderHtml } from './render/html.js';
 import { renderJson } from './render/json.js';
 import { renderTerminal, verdict } from './render/terminal.js';
@@ -73,6 +73,7 @@ function parseOptions(argv: string[]) {
 type Values = ReturnType<typeof parseOptions>['values'];
 
 async function review(root: string, range: string | null, v: Values, io: Io): Promise<number> {
+  if (!hasCommits(root)) { io.stderr.write('whyline: this repository has no commits yet\n'); return 1; }
   const { base, head } = parseRange(range);
   let window: Window;
   try {
@@ -90,8 +91,9 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
   }
 
   const diffs = parseUnifiedDiff(diffText(root, range));
+  const untrackedFiles = head ? [] : untracked(root);
   if (!head) {
-    for (const p of untracked(root)) {
+    for (const p of untrackedFiles) {
       const content = readWorkingFile(root, p);
       if (content !== null && !looksBinary(content)) diffs.push(syntheticAdded(p, content));
     }
@@ -105,7 +107,7 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
     return 3;
   }
 
-  const tracked = new Set([...lsFiles(root), ...untracked(root)]);
+  const tracked = new Set([...lsFiles(root), ...untrackedFiles]);
   const repo: RepoFiles = {
     has: (p) => tracked.has(p),
     byBasename: (n) => [...tracked].filter((p) => p.split('/').pop() === n),
@@ -120,20 +122,25 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
     baseText: (p) => show(root, base, p),
     headText: (p) => (head ? show(root, head, p) : readWorkingFile(root, p)),
     repo,
+    now: io.now(),
   });
 
-  if (v.json) { io.stdout.write(renderJson(result)); return 0; }
   if (v.html) {
-    writeFileSync(v.html, renderHtml(result));
-    io.stdout.write(`${verdict(result)}\nwrote ${v.html}\n`);
-    return 0;
+    try {
+      writeFileSync(v.html, renderHtml(result));
+    } catch (e) {
+      io.stderr.write(`whyline: cannot write ${v.html}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}\n`);
+      return 1;
+    }
   }
+  if (v.json) { io.stdout.write(renderJson(result)); return 0; }
+  if (v.html) { io.stdout.write(`${verdict(result)}\nwrote ${v.html}\n`); return 0; }
   io.stdout.write(renderTerminal(result, { color: colorEnabled(v['no-color'], io.stdout, io.env), all: v.all }));
   return 0;
 }
 
 async function sessions(root: string, io: Io): Promise<number> {
-  const { all } = await findSessions(root, io.home, { window: { from: 0, to: Number.MAX_SAFE_INTEGER }, ids: [''] });
+  const { all } = await findSessions(root, io.home, { all: true });
   if (all.length === 0) { io.stderr.write(noSessions(all, io.home, null)); return 3; }
   io.stdout.write(all.map(line).join('\n') + '\n');
   return 0;
@@ -144,7 +151,7 @@ async function doctor(root: string, io: Io): Promise<number> {
   for (const dir of [join(io.home, '.claude', 'projects'), join(io.home, '.codex', 'sessions')]) {
     out.push(`${dir}: ${existsSync(dir) ? 'found' : 'missing'}`);
   }
-  const { selected } = await findSessions(root, io.home, { window: { from: 0, to: Number.MAX_SAFE_INTEGER }, ids: [''] });
+  const { selected } = await findSessions(root, io.home, { all: true });
   for (const a of adapters) {
     const mine = selected.filter((s) => s.ref.harness === a.harness);
     const skipped = mine.reduce((n, s) => n + s.skipped, 0);

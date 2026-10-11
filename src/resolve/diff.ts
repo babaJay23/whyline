@@ -1,4 +1,5 @@
 import type { FileDiff, FileStatus, Hunk } from '../types.js';
+import { splitLines } from '../lines.js';
 
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 
@@ -59,12 +60,4 @@ export function syntheticAdded(path: string, content: string): FileDiff {
     path, oldPath: null, status,
     hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: lines.length, removed: [], added: lines }],
   };
-}
-
-/** Split on \n only, drop the empty tail after a final newline, keep \r inside lines. */
-export function splitLines(content: string): string[] {
-  if (content === '') return [];
-  const parts = content.split('\n');
-  if (parts[parts.length - 1] === '') parts.pop();
-  return parts;
 }

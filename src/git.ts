@@ -15,6 +15,10 @@ export function repoRoot(cwd: string): string | null {
   return out ? out.trim() : null;
 }
 
+export function hasCommits(root: string): boolean {
+  return git(root, ['rev-parse', '--verify', '-q', 'HEAD']) !== null;
+}
+
 export function commitTime(root: string, rev: string): number {
   const out = git(root, ['show', '-s', '--format=%ct', rev]);
   if (!out) throw new Error(`cannot read commit time for ${rev}`);

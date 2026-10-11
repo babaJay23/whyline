@@ -21,10 +21,10 @@ function claudeSession(home: string, cwd: string, at: number, prompt: string, ed
   const t = (ms: number) => new Date(at + ms).toISOString();
   const rows: unknown[] = [
     { type: 'user', uuid: 'u1', promptId: 'p1', timestamp: t(0), cwd, sessionId: 'e2e', message: { role: 'user', content: prompt }, origin: { kind: 'human' } },
-    { type: 'assistant', uuid: 'a1', requestId: 'r1', timestamp: t(10), cwd, sessionId: 'e2e', message: { role: 'assistant', content: [{ type: 'text', text: 'Doing it.' }], usage: { input_tokens: 50, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } },
+    { type: 'assistant', uuid: 'a1', requestId: 'r1', timestamp: t(10), cwd, sessionId: 'e2e', message: { model: 'test-model', role: 'assistant', content: [{ type: 'text', text: 'Doing it.' }], usage: { input_tokens: 50, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } },
   ];
   edits.forEach((e, i) => {
-    rows.push({ type: 'assistant', uuid: `a${i + 2}`, requestId: `r${i + 2}`, timestamp: t(20 + i * 10), cwd, sessionId: 'e2e', message: { role: 'assistant', content: [{ type: 'tool_use', id: `tu${i}`, name: 'Edit', input: { file_path: join(cwd, e.file), old_string: e.old, new_string: e.neu, replace_all: false } }], usage: { input_tokens: 5, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } });
+    rows.push({ type: 'assistant', uuid: `a${i + 2}`, requestId: `r${i + 2}`, timestamp: t(20 + i * 10), cwd, sessionId: 'e2e', message: { model: 'test-model', role: 'assistant', content: [{ type: 'tool_use', id: `tu${i}`, name: 'Edit', input: { file_path: join(cwd, e.file), old_string: e.old, new_string: e.neu, replace_all: false } }], usage: { input_tokens: 5, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } });
   });
   writeFileSync(join(dir, 'e2e.jsonl'), rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
 }
@@ -162,6 +162,25 @@ describe('whyline (e2e)', () => {
     const o = io(r.dir, r.dir);
     expect(await run([], o)).toBe(1);
     expect(o.err).toBe('whyline: this repository has no commits yet\n');
+  });
+
+  it('prices turns from a user table with --prices and prints a brief view with --brief', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now(), 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    r.write('f.txt', 'b\n');
+    const prices = join(home, 'prices.json');
+    writeFileSync(prices, JSON.stringify({ 'test-model': { input: 1_000_000, output: 1_000_000, cacheRead: 0, cacheWrite: 0 } }));
+    const o = io(r.dir, home);
+    expect(await run(['--all', '--brief', '--prices', prices], o)).toBe(0);
+    expect(o.out).toContain('estimated cost $72.0000 (test-model)'); // 72 tokens at $1 each
+    expect(o.out).toContain('  f.txt @@ -1 +1 @@\n');
+    expect(o.out).not.toContain('+b');
+    const bad = io(r.dir, home);
+    expect(await run(['--prices', join(home, 'nope.json')], bad)).toBe(1);
+    expect(bad.err).toMatch(/^whyline: cannot read prices /);
   });
 
   it('lists sessions and runs doctor', async () => {

@@ -1,5 +1,5 @@
 {"timestamp":"2026-10-01T10:00:00.000Z","type":"session_meta","payload":{"session_id":"cx-1","id":"cx-1","timestamp":"2026-10-01T10:00:00.000Z","cwd":"/repo","originator":"codex_cli","cli_version":"0.142.5","source":"cli","model_provider":"openai"}}
-{"timestamp":"2026-10-01T10:00:00.100Z","type":"turn_context","payload":{"turn_id":"ct1","cwd":"/repo","workspace_roots":["/repo"],"current_date":"2026-10-01","approval_policy":"on-request"}}
+{"timestamp":"2026-10-01T10:00:00.100Z","type":"turn_context","payload":{"turn_id":"ct1","cwd":"/repo","model":"gpt-5.5","workspace_roots":["/repo"],"current_date":"2026-10-01","approval_policy":"on-request"}}
 {"timestamp":"2026-10-01T10:00:00.200Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions for /repo\n\n<INSTRUCTIONS>be good</INSTRUCTIONS>"}]}}
 {"timestamp":"2026-10-01T10:00:00.300Z","type":"event_msg","payload":{"type":"user_message","client_id":"c1","message":"rename the helper in src/util.ts to formatName","images":[]}}
 {"timestamp":"2026-10-01T10:00:01.000Z","type":"response_item","payload":{"type":"reasoning","id":"rs1","summary":[{"type":"summary_text","text":"Find the helper and rename it."}],"encrypted_content":"gAAAA"}}

@@ -63,8 +63,8 @@ describe('codex.read', () => {
   });
 
   it('maps token_count to usage with cached tokens split out', async () => {
-    expect(by(await load(), 'usage').map((u) => [u.turnId, u.input, u.cacheRead, u.cacheWrite, u.output])).toEqual([
-      ['ct1', 1000, 4000, 0, 120],
+    expect(by(await load(), 'usage').map((u) => [u.turnId, u.input, u.cacheRead, u.cacheWrite, u.output, u.model])).toEqual([
+      ['ct1', 1000, 4000, 0, 120, 'gpt-5.5'],
     ]);
   });
 

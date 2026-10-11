@@ -18,7 +18,7 @@ const repo: RepoFiles = {
 function prov(over: Partial<Provenance> = {}): Provenance {
   return {
     harness: 'claude-code', sessionId: 's1', turnId: 't1', turnNumber: 1, agentId: 's1', agentName: null, agentBrief: null,
-    prompt: { text: 'change src/a.ts', at: 100 }, reasoning: null, tool: 'Edit', editId: 'e1', at: 100, turnCost: null, ...over,
+    prompt: { text: 'change src/a.ts', at: 100 }, reasoning: null, tool: 'Edit', editId: 'e1', at: 100, turnCost: null, turnModel: null, turnCostUsd: null, ...over,
   };
 }
 function turn(over: Partial<Turn> = {}): Turn {

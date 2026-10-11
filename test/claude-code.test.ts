@@ -95,6 +95,7 @@ describe('claudeCode.read', () => {
       ['p1', 40, 9, 0, 0],
       ['p3', 30, 8, 0, 0],
     ]);
+    expect(u.map((x) => x.model)).toEqual(['claude-opus-5', 'claude-opus-5', 'claude-opus-5', 'claude-sonnet-5', null]);
   });
 
   it('emits a spawn linking the Agent call to the subagent id', async () => {

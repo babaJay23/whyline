@@ -8,15 +8,15 @@ const prov: Provenance = {
   harness: 'claude-code', sessionId: 's1', turnId: 'p3', turnNumber: 3, agentId: 's1', agentName: null, agentBrief: null,
   prompt: { text: "no, don't touch the readme.\nput the docs in docs/notes.md instead", at: Date.parse('2026-10-01T10:00:08Z') },
   reasoning: { text: 'Moving the notes.', at: 0 }, tool: 'Write', editId: 'toolu_4', at: Date.parse('2026-10-01T10:00:10Z'),
-  turnCost: { input: 30, output: 8, cacheRead: 1200, cacheWrite: 0 },
+  turnCost: { input: 30, output: 8, cacheRead: 1200, cacheWrite: 0 }, turnModel: 'claude-opus-5', turnCostUsd: 0.00095,
 };
 const flagged: AnnotatedHunk = {
   oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, removed: [], lines: [{ text: '# notes', provenance: prov }],
   lead: prov, otherTurns: 0, flags: [{ flag: 'unrequested', detail: 'prompt named README.md' }, { flag: 'after-correction', detail: 'prompt begins "no, don\'t touch the readme."' }],
 };
 const plain: AnnotatedHunk = {
-  oldStart: 2, oldLines: 1, newStart: 2, newLines: 1, removed: ['two'], lines: [{ text: '2', provenance: { ...prov, turnId: 'p1', turnNumber: 1, turnCost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 } } }],
-  lead: { ...prov, turnId: 'p1', turnNumber: 1, turnCost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 } }, otherTurns: 0, flags: [],
+  oldStart: 2, oldLines: 1, newStart: 2, newLines: 1, removed: ['two'], lines: [{ text: '2', provenance: { ...prov, turnId: 'p1', turnNumber: 1, turnCost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 }, turnCostUsd: 0.001 } }],
+  lead: { ...prov, turnId: 'p1', turnNumber: 1, turnCost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 }, turnCostUsd: 0.001 }, otherTurns: 0, flags: [],
 };
 const untraced: AnnotatedHunk = {
   oldStart: 5, oldLines: 0, newStart: 6, newLines: 2, removed: [], lines: [{ text: 'x', provenance: null }, { text: 'y', provenance: null }],
@@ -26,10 +26,10 @@ const diff: AnnotatedDiff = {
   schemaVersion: 1, range: 'HEAD..working tree', generatedAt: 0,
   sessions: [{ harness: 'claude-code', id: 's1', path: '/x', cwd: '/repo', startedAt: 0, endedAt: 1 }],
   files: [
-    { path: 'docs/notes.md', status: 'added', hunks: [flagged], turnIds: ['p3'], cost: prov.turnCost, ledgerMismatch: false, driftedAt: null },
-    { path: 'src/a.ts', status: 'modified', hunks: [plain, untraced], turnIds: ['p1'], cost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 }, ledgerMismatch: true, driftedAt: null },
+    { path: 'docs/notes.md', status: 'added', hunks: [flagged], turnIds: ['p3'], cost: prov.turnCost, costUsd: 0.00095, ledgerMismatch: false, driftedAt: null },
+    { path: 'src/a.ts', status: 'modified', hunks: [plain, untraced], turnIds: ['p1'], cost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 }, costUsd: 0.001, ledgerMismatch: true, driftedAt: null },
   ],
-  totals: { files: 2, hunks: 3, flagged: { untraced: 1, unrequested: 1, 'after-correction': 1, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 130, output: 28, cacheRead: 1200, cacheWrite: 0 } },
+  totals: { files: 2, hunks: 3, flagged: { untraced: 1, unrequested: 1, 'after-correction': 1, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 130, output: 28, cacheRead: 1200, cacheWrite: 0 }, costUsd: 0.00195, unpricedModels: [] },
 };
 
 describe('fmtTokens', () => {
@@ -58,6 +58,7 @@ describe('renderTerminal', () => {
     const out = renderTerminal(diff, { color: false, all: false });
     expect(out).toBe([
       '3 hunks across 2 files, 2 need a look: 1 untraced, 1 unrequested, 1 after-correction',
+      'estimated cost $0.0020 (claude-opus-5) · built-in prices, --prices to override',
       '',
       'no turn found',
       '  src/a.ts @@ -5,0 +6,2 @@',
@@ -66,7 +67,7 @@ describe('renderTerminal', () => {
       '  +x',
       '  +y',
       '',
-      'turn 3 · claude-code · main agent · 2026-10-01 10:00 · 38 tokens · 1.2k from cache',
+      'turn 3 · claude-code · main agent · 2026-10-01 10:00 · 38 tokens · 1.2k from cache · ~$0.0010',
       "  you asked: no, don't touch the readme. put the docs in docs/notes.md instead",
       '  agent said: Moving the notes.',
       '  docs/notes.md @@ -0,0 +1 @@',
@@ -75,7 +76,31 @@ describe('renderTerminal', () => {
       '  +# notes',
       '',
       'unflagged:',
-      '  src/a.ts  1 hunk  1 turn  120 tokens',
+      '  src/a.ts  1 hunk  1 turn  120 tokens · ~$0.0010',
+      '',
+    ].join('\n'));
+  });
+
+  it('names unpriced models instead of hiding them', () => {
+    const d = { ...diff, totals: { ...diff.totals, costUsd: 0, unpricedModels: ['codex-auto-review'] } };
+    expect(renderTerminal(d, { color: false, all: false })).toContain('\nestimated cost $0.0000 · no price for codex-auto-review · --prices to override\n');
+  });
+
+  it('brief mode prints headers and flags only, no diff bodies or reasoning', () => {
+    const out = renderTerminal(diff, { color: false, all: false, brief: true });
+    expect(out).toBe([
+      '3 hunks across 2 files, 2 need a look: 1 untraced, 1 unrequested, 1 after-correction',
+      'estimated cost $0.0020 (claude-opus-5) · built-in prices, --prices to override',
+      '',
+      'no turn found',
+      '  src/a.ts @@ -5,0 +6,2 @@  untraced',
+      '',
+      'turn 3 · claude-code · main agent · 2026-10-01 10:00 · 38 tokens · 1.2k from cache · ~$0.0010',
+      "  you asked: no, don't touch the readme. put the docs in docs/notes.md instead",
+      '  docs/notes.md @@ -0,0 +1 @@  unrequested, after-correction',
+      '',
+      'unflagged:',
+      '  src/a.ts  1 hunk  1 turn  120 tokens · ~$0.0010',
       '',
     ].join('\n'));
   });
@@ -94,7 +119,7 @@ describe('renderTerminal', () => {
   it('names the subagent and its brief in the group header', () => {
     const sub: AnnotatedHunk = { ...flagged, lead: { ...prov, agentId: 'abc', agentName: 'helper', agentBrief: 'Write the notes file' }, flags: [{ flag: 'subagent', detail: 'helper' }] };
     const d = { ...diff, files: [{ ...diff.files[0]!, hunks: [sub] }] };
-    expect(renderTerminal(d, { color: false, all: false })).toContain('turn 3 · claude-code · subagent helper · 2026-10-01 10:00 · 38 tokens · 1.2k from cache\n  brief: Write the notes file\n  you asked: ');
+    expect(renderTerminal(d, { color: false, all: false })).toContain('turn 3 · claude-code · subagent helper · 2026-10-01 10:00 · 38 tokens · 1.2k from cache · ~$0.0010\n  brief: Write the notes file\n  you asked: ');
   });
 
   it('caps long hunks and notes a file that differs from the replayed edits', () => {
@@ -110,13 +135,13 @@ describe('renderTerminal', () => {
     const viaShell: AnnotatedHunk = { ...untraced, lead: { ...prov, tool: 'shell', editId: 'sh1' } };
     const d = { ...diff, files: [{ ...diff.files[1]!, hunks: [viaShell], ledgerMismatch: false }] };
     const out = renderTerminal(d, { color: false, all: false });
-    expect(out).toContain('turn 3 · claude-code · main agent · 2026-10-01 10:00 · 38 tokens · 1.2k from cache\n  you asked: ');
+    expect(out).toContain('turn 3 · claude-code · main agent · 2026-10-01 10:00 · 38 tokens · 1.2k from cache · ~$0.0010\n  you asked: ');
     expect(out).not.toContain('no turn found');
   });
 
   it('prints every hunk with --all and no summary', () => {
     const out = renderTerminal(diff, { color: false, all: true });
-    expect(out).toContain('turn 1 · claude-code · main agent · 2026-10-01 10:00 · 120 tokens\n');
+    expect(out).toContain('turn 1 · claude-code · main agent · 2026-10-01 10:00 · 120 tokens · ~$0.0010\n');
     expect(out).toContain('  src/a.ts @@ -2 +2 @@\n    file differs from what the recorded edits produce; some lines were changed another way\n  -two\n  +2\n');
     expect(out).not.toContain('unflagged:');
   });

@@ -23,7 +23,7 @@ describe('resolve', () => {
     { kind: 'prompt', id: 'p1', ...base, turnId: 't1', at: 200, text: 'change two to 2 in a.ts' },
     { kind: 'reasoning', id: 'r1', ...base, turnId: 't1', at: 210, text: 'Replacing two with 2.', visible: true },
     { kind: 'edit', id: 'e1', ...base, turnId: 't1', at: 220, tool: 'Edit', file: '/repo/a.ts', op: { type: 'replace', old: 'two', new: '2', all: false } },
-    { kind: 'usage', id: 'u1', ...base, turnId: 't1', at: 230, input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
+    { kind: 'usage', id: 'u1', ...base, turnId: 't1', at: 230, input: 10, output: 5, cacheRead: 0, cacheWrite: 0, model: 'claude-opus-5' },
   ];
   const diff = parseUnifiedDiff('diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -2 +2 @@\n-two\n+2\n');
 
@@ -49,6 +49,11 @@ describe('resolve', () => {
     expect(p.reasoning?.text).toBe('Replacing two with 2.');
     expect(p.turnCost).toEqual({ input: 10, output: 5, cacheRead: 0, cacheWrite: 0 });
     expect(hunk!.lead).toEqual(p);
+    expect(p.turnModel).toBe('claude-opus-5');
+    expect(p.turnCostUsd).toBeCloseTo((10 * 5 + 5 * 25) / 1e6, 10);
+    expect(file!.costUsd).toBeCloseTo(p.turnCostUsd!, 10);
+    expect(out.totals.costUsd).toBeCloseTo(p.turnCostUsd!, 10);
+    expect(out.totals.unpricedModels).toEqual([]);
     expect(hunk!.flags).toEqual([]);
     expect(file!.cost).toEqual(p.turnCost);
     expect(file!.ledgerMismatch).toBe(false);
@@ -150,6 +155,18 @@ describe('resolve', () => {
     expect(h.lead?.prompt.text).toBe('write the cli entry point');
     expect(h.lead?.reasoning?.text).toBe('Writing src/cli.ts with a heredoc.');
     expect(out.files[0]!.cost).toEqual({ input: 9, output: 9, cacheRead: 0, cacheWrite: 0 });
+  });
+
+  it('reports models it cannot price instead of pricing them at zero', () => {
+    const evs: Event[] = [
+      { kind: 'prompt', id: 'p', ...base, turnId: 't1', at: 200, text: 'write n.ts' },
+      { kind: 'edit', id: 'w1', ...base, turnId: 't1', at: 210, tool: 'Write', file: '/repo/n.ts', op: { type: 'write', content: 'n\n' } },
+      { kind: 'usage', id: 'u', ...base, turnId: 't1', at: 220, input: 5, output: 5, cacheRead: 0, cacheWrite: 0, model: 'codex-auto-review' },
+    ];
+    const out = run({ diffs: [syntheticAdded('n.ts', 'n\n')], sessions: [session(evs)], baseText: () => null, headText: () => 'n\n', repo: repoOf({ 'n.ts': 'n\n' }) });
+    expect(out.files[0]!.hunks[0]!.lead?.turnCostUsd).toBeNull();
+    expect(out.totals.costUsd).toBe(0);
+    expect(out.totals.unpricedModels).toEqual(['codex-auto-review']);
   });
 
   it('flags a deletion no edit accounts for, and credits one the agent made', () => {

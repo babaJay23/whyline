@@ -42,6 +42,8 @@ describe('indexEvents', () => {
     const p3 = ix.turns.get(turnKey('sess-1', 'p3'))!;
     expect(p3.prevInterrupted).toBe(true);
     expect([p1.number, p2.number, p3.number]).toEqual([1, 2, 3]);
+    expect(p1.model).toBe('claude-opus-5'); // the model that did most of the turn's work
+    expect(ix.turns.get(turnKey('cx-1', 'ct1'))!.model).toBe('gpt-5.5');
     expect(p2.prompt).toBeNull(); // an interrupted turn has no ask of its own
     expect(p1.prevInterrupted).toBe(false);
     expect(ix.turns.get(turnKey('cx-1', 'ct2'))!.interrupted).toBe(true);

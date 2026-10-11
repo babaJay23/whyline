@@ -5,13 +5,13 @@ import type { AnnotatedDiff } from '../src/types.js';
 const diff: AnnotatedDiff = {
   schemaVersion: 1, range: 'HEAD..working tree', generatedAt: 0, sessions: [],
   files: [{
-    path: 'src/<a>.ts', status: 'modified', turnIds: ['p1'], cost: null, ledgerMismatch: false, driftedAt: null,
+    path: 'src/<a>.ts', status: 'modified', turnIds: ['p1'], cost: null, costUsd: null, ledgerMismatch: false, driftedAt: null,
     hunks: [
       { oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, removed: ['<b>'], lines: [{ text: 'x && y', provenance: null }], lead: null, otherTurns: 0, flags: [{ flag: 'untraced', detail: 'no structured edit covers these lines' }] },
-      { oldStart: 3, oldLines: 0, newStart: 3, newLines: 1, removed: [], lines: [{ text: 'ok', provenance: { harness: 'codex', sessionId: 's', turnId: 'p1', turnNumber: 1, agentId: 's', agentName: null, agentBrief: null, prompt: { text: 'add "ok"', at: 0 }, reasoning: null, tool: 'apply_patch', editId: 'c', at: 0, turnCost: null } }], lead: { harness: 'codex', sessionId: 's', turnId: 'p1', turnNumber: 1, agentId: 's', agentName: null, agentBrief: null, prompt: { text: 'add "ok"', at: 0 }, reasoning: null, tool: 'apply_patch', editId: 'c', at: 0, turnCost: null }, otherTurns: 0, flags: [] },
+      { oldStart: 3, oldLines: 0, newStart: 3, newLines: 1, removed: [], lines: [{ text: 'ok', provenance: { harness: 'codex', sessionId: 's', turnId: 'p1', turnNumber: 1, agentId: 's', agentName: null, agentBrief: null, prompt: { text: 'add "ok"', at: 0 }, reasoning: null, tool: 'apply_patch', editId: 'c', at: 0, turnCost: null, turnModel: null, turnCostUsd: null } }], lead: { harness: 'codex', sessionId: 's', turnId: 'p1', turnNumber: 1, agentId: 's', agentName: null, agentBrief: null, prompt: { text: 'add "ok"', at: 0 }, reasoning: null, tool: 'apply_patch', editId: 'c', at: 0, turnCost: null, turnModel: null, turnCostUsd: null }, otherTurns: 0, flags: [] },
     ],
   }],
-  totals: { files: 1, hunks: 2, flagged: { untraced: 1, unrequested: 0, 'after-correction': 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
+  totals: { files: 1, hunks: 2, flagged: { untraced: 1, unrequested: 0, 'after-correction': 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 0, unpricedModels: [] },
 };
 
 describe('renderHtml', () => {

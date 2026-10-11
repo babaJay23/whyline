@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-10
 **Status:** approved for planning
-**One line:** `git blame` tells you who wrote a line. `whyline` tells you which prompt wrote it, what the agent was thinking, which agent did it, what it cost, and whether it matches what you asked for.
+**One line:** `whyline` reads the diff you are about to commit and tells you which hunks you never asked for, which came after you corrected the agent, which a subagent wrote, and which it cannot trace. Under each flag it shows the proof: the prompt, the agent's reasoning, the agent, and what the turn cost.
 
 ## 1. Problem
 
@@ -13,13 +13,16 @@ Evidence gathered 2026-10-10 (Hacker News threads from the last four months, top
 - The most-replied comment on the "Why Software Factories Fail" HN thread (394 pts) names PR review of agent output as where the workflow breaks.
 - Issue #33932 (204 reactions) asks for a diff review UI; #21151 (186) asks which file a tool touched.
 - Developers running parallel worktrees report inspecting each by hand with no way to tell why a hunk exists.
-- GitHub search for tools linking agent changes to the instruction that caused them: zero results. The closest tool, mesa-dot-dev/agentblame (102 stars, last push May 2026), marks lines AI-vs-human via editor hooks and needs Bun plus per-repo setup. It answers "was this AI?", not "why".
+- Line-level lookup already exists. entireio/cli (5,172 stars, Go, hook-based, company-backed) has `entire blame` and `entire why file:line`. agitHQ/agit (6 stars, TypeScript, reads native logs from 13 harnesses with no hooks) has `agit blame` and `agit why`, and stops honestly at shell edits. mesa-dot-dev/agentblame (102 stars) marks lines AI-vs-human via editor hooks. All three answer "where did this line come from?"
+- Nothing ships the review question: "which hunks in this diff should I worry about?" Nine GitHub searches and a web search found only a July 2026 arXiv paper (2607.29516) that defines "unrequested changes" and scores them with a model, and CodeRabbit's out-of-scope check at PR time against a linked issue. Neither is local, deterministic, or pre-commit.
+
+**Positioning:** whyline builds the same provenance layer those tools have (it needs it as evidence), but leads with the flags. The README says this plainly and points readers to Agit for session forking and sharing, and to Entire for team-wide capture.
 
 ## 2. Users and success
 
 **v1 user:** a solo developer who ran one or more agent sessions in a repo and wants to review the result locally before committing or opening a PR.
 
-**Success:** run one command in the repo with no setup and get the diff annotated with provenance and flags. Works on sessions already run in the past. Correct on every line it labels; honest ("untraced") on every line it cannot.
+**Success:** run one command in the repo with no setup and get a verdict ("14 hunks, 3 need a look") with the flagged hunks first and the provenance under each as proof. Works on sessions already run in the past. Correct on every line it labels; honest ("untraced") on every line it cannot.
 
 **Not v1:** team/PR surfaces, hook-based exact capture of shell edits, provenance stored in git. The ledger format is designed so those plug in later (section 10).
 
@@ -139,12 +142,12 @@ type Provenance = {
 
 3. If not found, provenance is `null` and the line is `untraced`.
 
-Hunks are then flagged. Flags are deterministic; no model calls.
+Hunks are then flagged. Flags are deterministic; no model calls. A hunk may carry several flags.
 
 | Flag | Rule |
 |---|---|
 | `untraced` | Any line in the hunk has null provenance. Hint attached if a `shell` event in the window `touches` this file. |
-| `off-task` | The file is not mentioned in the turn's prompt text (basename or path), and no file that is mentioned imports or is imported by it. Import check: regex for `import`/`require`/`from` lines in the mentioned files and this file, v1 supports JS/TS/Python. Rendered as "possibly off-task". |
+| `unrequested` | Evaluated only when the turn's prompt names at least one path or basename that exists in the repo; a prompt that names no file ("fix the failing tests") never raises it. Raised when this file is not among the named files and no named file imports or is imported by it. Import check: regex for `import`/`require`/`from` lines in the named files and this file, v1 supports JS/TS/Python. Rendered as "unrequested: prompt named a.ts, b.ts". |
 | `after-correction` | The turn's prompt starts with or contains one of a fixed phrase list (`no`, `don't`, `do not`, `stop`, `revert`, `undo`, `that's wrong`, `wrong`, `instead`, `not what I`) as a whole word within the first 80 characters, or an `interrupt` event preceded the turn. |
 | `subagent` | `agentId` differs from the session's main agent. Carries `agentName` and `spawn.brief`. |
 | `churned` | Lines in this hunk were written by three or more distinct edits across the window. |
@@ -156,19 +159,19 @@ Per-file and per-review totals: turn cost summed over distinct turns that touche
 
 All three consume the same `AnnotatedDiff` object.
 
-- **terminal** (default): unified diff with color. Each hunk is preceded by a two-to-four line provenance header: `turn 12 · claude-code · main agent · 4.2k tokens`, then the prompt (first 120 chars), then the reasoning (first 160 chars), then flags. Lines keep normal `+`/`-` prefixes. Respects `NO_COLOR` and `--no-color`.
-- **html**: one self-contained file, inline CSS, no framework, no external requests. Left column: file list with flag counts. Main: hunks with expandable prompt and full reasoning, flags as chips, a review-wide summary at top (files, hunks, flagged hunks by type, total tokens, sessions used).
+- **terminal** (default): first line is the verdict, e.g. `14 hunks across 6 files, 3 need a look: 2 unrequested, 1 after-correction`. Then flagged hunks, worst first (untraced, unrequested, after-correction, drifted, churned, subagent), then the rest only with `--all`. Each hunk is preceded by a header: flags on the first line, then `turn 12 · claude-code · main agent · 4.2k tokens`, the prompt (first 120 chars), the reasoning (first 160 chars). Lines keep normal `+`/`-` prefixes. Respects `NO_COLOR` and `--no-color`. A diff with no flagged hunks prints the verdict and the per-file provenance summary, nothing else.
+- **html**: one self-contained file, inline CSS, no framework, no external requests. Top: the verdict and counts by flag. Left column: file list with flag counts. Main: flagged hunks first, each with flags as chips, expandable prompt and full reasoning, cost; unflagged hunks below, collapsed.
 - **json**: the `AnnotatedDiff` object, stable keys, `schemaVersion: 1`.
 
 ### 5.6 CLI (`src/cli.ts`)
 
 ```
-whyline [range] [--html <path>] [--json] [--since <date>] [--session <id>...] [--no-color]
+whyline [range] [--all] [--html <path>] [--json] [--since <date>] [--session <id>...] [--no-color]
 whyline sessions           # table: harness, id, started, turns, edits, files touched
 whyline doctor             # what directories were scanned, sessions found, lines skipped, gaps
 ```
 
-Default range: working tree vs `HEAD`. Session window: default is all sessions in this repo whose time span overlaps the commits in the range (for working tree, since the HEAD commit time); `--since` and `--session` override.
+Default range: working tree vs `HEAD`, including untracked files. `--all` shows unflagged hunks too (JSON and HTML always include everything). Session window: default is all sessions in this repo whose time span overlaps the commits in the range (for working tree, since the HEAD commit time); `--since` and `--session` override.
 
 Exit codes: 0 success, 1 usage error, 2 not a git repo or no diff, 3 no sessions found (prints what directories were checked).
 

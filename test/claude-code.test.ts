@@ -12,7 +12,7 @@ describe('readJsonl', () => {
   it('skips blank and unparsable lines and counts them', () => {
     const { rows, skipped } = readJsonl(join(HOME, '.claude/projects/-repo/sess-1.jsonl'));
     expect(skipped).toBe(1); // "not json"; blank lines are not counted
-    expect(rows.length).toBe(16);
+    expect(rows.length).toBe(18);
   });
 });
 
@@ -29,7 +29,7 @@ describe('claudeCode.discover', () => {
     expect(refs).toHaveLength(1);
     expect(refs[0]).toMatchObject({ harness: 'claude-code', id: 'sess-1', cwd: '/repo' });
     expect(refs[0]!.startedAt).toBe(T('2026-10-01T10:00:01.000Z'));
-    expect(refs[0]!.endedAt).toBe(T('2026-10-01T10:00:10.200Z'));
+    expect(refs[0]!.endedAt).toBe(T('2026-10-01T10:00:12.000Z'));
   });
 
   it('finds nothing for another repo', async () => {
@@ -46,7 +46,7 @@ describe('claudeCode.read', () => {
   }
   const by = <K extends Event['kind']>(evs: Event[], k: K) => evs.filter((e): e is Extract<Event, { kind: K }> => e.kind === k);
 
-  it('emits human prompts with promptId as turnId and skips meta and tool results', async () => {
+  it('emits human prompts with promptId as turnId and skips meta, tool results, local-command output and compaction summaries', async () => {
     const prompts = by(await load(), 'prompt');
     expect(prompts.map((p) => [p.turnId, p.text.slice(0, 20)])).toEqual([
       ['p1', 'add a TRANSCRIPTION '],

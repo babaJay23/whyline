@@ -103,9 +103,9 @@ function parseRows(rows: unknown[], sessionId: string, agentId: string | null): 
         }
         continue;
       }
-      if (o.isMeta === true || agentId !== null) continue;
+      if (o.isMeta === true || o.isCompactSummary === true || agentId !== null) continue;
       const text = humanText(msg);
-      if (text === null) continue;
+      if (text === null || /^\s*<(?:local-command|command-)/.test(text)) continue; // slash-command plumbing, not the user
       turnId = str(o.promptId) ?? str(o.uuid) ?? turnId;
       if (text.includes('[Request interrupted by user')) {
         events.push({ kind: 'interrupt', id: `${turnId}:interrupt`, sessionId, agentId: agent, turnId, at });

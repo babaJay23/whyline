@@ -15,3 +15,4 @@
 {"timestamp":"2026-10-01T10:00:05.500Z","type":"response_item","payload":{"type":"function_call","id":"fc2","name":"shell","arguments":"{\"command\": [\"bash\", \"-lc\", \"sed -i '' s/formatName/helper/ src/util.ts\"]}","call_id":"call_3"}}
 {"timestamp":"2026-10-01T10:00:05.600Z","type":"response_item","payload":{"type":"function_call","id":"fc3","name":"exec_command","arguments":"{not json","call_id":"call_4"}}
 {"timestamp":"2026-10-01T10:00:06.000Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"ct2","reason":"interrupted","completed_at":1790000000,"duration_ms":900}}
+{"timestamp":"2026-10-01T10:00:07.000Z","type":"response_item","payload":{"type":"function_call","id":"fc4","name":"exec_command","arguments":"{\"cmd\": \"apply_patch <<'EOF'\\n*** Begin Patch\\n*** Update File: /repo/src/x.ts\\n@@\\n-a\\n+b\\n*** End Patch\\nEOF\"}","call_id":"call_5"}}

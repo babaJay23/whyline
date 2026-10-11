@@ -19,7 +19,7 @@ describe('codex.discover', () => {
     const refs = await codex.discover('/repo', HOME);
     expect(refs).toHaveLength(1);
     expect(refs[0]).toMatchObject({ harness: 'codex', id: 'cx-1', cwd: '/repo', startedAt: Date.parse('2026-10-01T10:00:00.000Z') });
-    expect(refs[0]!.endedAt).toBe(Date.parse('2026-10-01T10:00:06.000Z'));
+    expect(refs[0]!.endedAt).toBe(Date.parse('2026-10-01T10:00:07.000Z'));
     expect(await codex.discover('/elsewhere', HOME)).toEqual([]);
   });
 });
@@ -49,10 +49,11 @@ describe('codex.read', () => {
     expect(edits.map((e) => [e.id, e.tool, e.file, e.op.type, e.turnId])).toEqual([
       ['call_2', 'apply_patch', '/repo/src/util.ts', 'replace', 'ct1'],
       ['call_2', 'apply_patch', '/repo/src/new.ts', 'write', 'ct1'],
+      ['call_5', 'apply_patch', '/repo/src/x.ts', 'replace', 'ct2'],
     ]);
   });
 
-  it('emits shell events for exec_command and shell, skipping unparsable arguments', async () => {
+  it('emits shell events for exec_command and shell, skipping unparsable arguments and heredoc patches', async () => {
     const sh = by(await load(), 'shell');
     expect(sh.map((s) => [s.turnId, s.command])).toEqual([
       ['ct1', 'grep -n helper src/util.ts'],

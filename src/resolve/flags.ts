@@ -20,7 +20,8 @@ export interface HunkFacts {
 
 export const FLAG_ORDER: Flag[] = ['untraced', 'unrequested', 'after-correction', 'drifted', 'churned', 'subagent'];
 
-export const CORRECTION_WORDS = /\b(no|don't|do not|stop|revert|undo|wrong|instead|not what i)\b/i;
+/** Short words only count when they open the prompt ("No. Use jq."), so "no-cache" and "there's no README" pass. */
+export const CORRECTION_WORDS = /^\W*(?:no|stop|undo)(?=[\s,.!:;]|$)|\b(?:don't|do not|revert|wrong|instead|not what i)\b/i;
 const CORRECTION_WINDOW = 80;
 const CHURN_TURNS = 3;
 const CHURN_MIN_CHARS = 8;
@@ -30,7 +31,8 @@ export function flagHunk(f: HunkFacts): FlagHit[] {
   const push = (flag: Flag, detail: string) => hits.push({ flag, detail });
 
   if (f.lines.some((l) => l.provenance === null) || (f.lines.length === 0 && f.lead === null)) {
-    const sh = f.shells.find((s) => s.touches.some((t) => f.file === t || f.file.endsWith('/' + t) || t.endsWith('/' + f.file) || t === basename(f.file)));
+    const mentions = (s: ShellEvent) => s.touches.some((t) => f.file === t || f.file.endsWith('/' + t) || t.endsWith('/' + f.file) || t === basename(f.file));
+    const sh = [...f.shells].reverse().find(mentions); // the latest mention is the likeliest culprit
     push('untraced', sh ? `shell in turn ${sh.turnId} mentioned this file: ${sh.command.slice(0, 60)}` : 'no structured edit covers these lines');
   }
 

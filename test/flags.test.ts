@@ -49,6 +49,12 @@ describe('CORRECTION_WORDS', () => {
     expect(CORRECTION_WORDS.test('use jq instead')).toBe(true);
     expect(CORRECTION_WORDS.test('add nothing fancy')).toBe(false); // "no" inside "nothing"
     expect(CORRECTION_WORDS.test('update the Snow module')).toBe(false);
+    expect(CORRECTION_WORDS.test('add no-cache headers to the fetch')).toBe(false); // "no" only counts as a sentence opener
+    expect(CORRECTION_WORDS.test("there's no README yet, add one")).toBe(false);
+    expect(CORRECTION_WORDS.test('No. Put it in utils.')).toBe(true);
+    expect(CORRECTION_WORDS.test('stop')).toBe(true);
+    expect(CORRECTION_WORDS.test('please undo that')).toBe(false);
+    expect(CORRECTION_WORDS.test('undo that')).toBe(true);
   });
 });
 
@@ -65,6 +71,8 @@ describe('flagHunk', () => {
     const hits = flagHunk(f);
     expect(hits[0]!.flag).toBe('untraced');
     expect(hits[0]!.detail).toContain('turn t9');
+    const later = { ...f.shells[0]!, id: 'sh2', turnId: 't12', at: 90, command: 'python3 fix.py src/a.ts' };
+    expect(flagHunk({ ...f, shells: [f.shells[0]!, later] })[0]!.detail).toContain('turn t12'); // the most recent mention is the likely culprit
     expect(flagHunk(facts({ lines: [{ text: 'b', provenance: null }] }))[0]!.detail).toBe('no structured edit covers these lines');
   });
 

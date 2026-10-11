@@ -89,7 +89,15 @@ export const codex: Adapter = {
       } else if (pt === 'function_call') {
         const callId = str(p.call_id) ?? str(p.id) ?? `${turnId}:fc:${++n}`;
         const command = shellCommand(str(p.name), str(p.arguments));
-        if (command) events.push({ kind: 'shell', id: callId, ...base, command, touches: pathTokens(command) });
+        if (!command) continue;
+        // Codex sometimes delivers apply_patch through a shell heredoc; the patch text is still structured.
+        const patchAt = command.indexOf('*** Begin Patch');
+        const patched = patchAt === -1 ? [] : parseApplyPatch(command.slice(patchAt));
+        if (patched.length) {
+          for (const { file, op } of patched) events.push({ kind: 'edit', id: callId, ...base, tool: 'apply_patch', file, op });
+        } else {
+          events.push({ kind: 'shell', id: callId, ...base, command, touches: pathTokens(command) });
+        }
       } else if (pt === 'custom_tool_call' && p.name === 'apply_patch' && str(p.input)) {
         const callId = str(p.call_id) ?? str(p.id) ?? `${turnId}:patch:${++n}`;
         for (const { file, op } of parseApplyPatch(p.input as string)) {

@@ -47,7 +47,7 @@ describe('indexEvents', () => {
 
   it('groups edits by repo-relative path across harnesses', async () => {
     const ix = await index();
-    expect([...ix.editsByFile.keys()].sort()).toEqual(['docs/notes.md', 'src/a.ts', 'src/b.ts', 'src/new.ts', 'src/util.ts']);
+    expect([...ix.editsByFile.keys()].sort()).toEqual(['docs/notes.md', 'src/a.ts', 'src/b.ts', 'src/new.ts', 'src/util.ts', 'src/x.ts']);
     expect(ix.editsByFile.get('src/util.ts')!.map((e) => e.turnId)).toEqual(['ct1']);
   });
 

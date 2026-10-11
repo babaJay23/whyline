@@ -1,0 +1,100 @@
+import { describe, it, expect } from 'vitest';
+import { renderJson } from '../src/render/json.js';
+import { renderTerminal, fmtTokens, verdict } from '../src/render/terminal.js';
+import { paint } from '../src/render/ansi.js';
+import type { AnnotatedDiff, AnnotatedHunk, Provenance } from '../src/types.js';
+
+const prov: Provenance = {
+  harness: 'claude-code', sessionId: 's1', turnId: 'p3', agentId: 's1', agentName: null,
+  prompt: { text: "no, don't touch the readme.\nput the docs in docs/notes.md instead", at: Date.parse('2026-10-01T10:00:08Z') },
+  reasoning: { text: 'Moving the notes.', at: 0 }, tool: 'Write', editId: 'toolu_4', at: Date.parse('2026-10-01T10:00:10Z'),
+  turnCost: { input: 30, output: 8, cacheRead: 1200, cacheWrite: 0 },
+};
+const flagged: AnnotatedHunk = {
+  oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, removed: [], lines: [{ text: '# notes', provenance: prov }],
+  lead: prov, otherTurns: 0, flags: [{ flag: 'unrequested', detail: 'prompt named README.md' }, { flag: 'after-correction', detail: 'prompt begins "no, don\'t touch the readme."' }],
+};
+const plain: AnnotatedHunk = {
+  oldStart: 2, oldLines: 1, newStart: 2, newLines: 1, removed: ['two'], lines: [{ text: '2', provenance: { ...prov, turnId: 'p1', turnCost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 } } }],
+  lead: { ...prov, turnId: 'p1', turnCost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 } }, otherTurns: 0, flags: [],
+};
+const untraced: AnnotatedHunk = {
+  oldStart: 5, oldLines: 0, newStart: 6, newLines: 2, removed: [], lines: [{ text: 'x', provenance: null }, { text: 'y', provenance: null }],
+  lead: null, otherTurns: 0, flags: [{ flag: 'untraced', detail: 'no structured edit covers these lines' }],
+};
+const diff: AnnotatedDiff = {
+  schemaVersion: 1, range: 'HEAD..working tree', generatedAt: 0,
+  sessions: [{ harness: 'claude-code', id: 's1', path: '/x', cwd: '/repo', startedAt: 0, endedAt: 1 }],
+  files: [
+    { path: 'docs/notes.md', status: 'added', hunks: [flagged], turnIds: ['p3'], cost: prov.turnCost, ledgerMismatch: false, driftedAt: null },
+    { path: 'src/a.ts', status: 'modified', hunks: [plain, untraced], turnIds: ['p1'], cost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 }, ledgerMismatch: true, driftedAt: null },
+  ],
+  totals: { files: 2, hunks: 3, flagged: { untraced: 1, unrequested: 1, 'after-correction': 1, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 130, output: 28, cacheRead: 1200, cacheWrite: 0 } },
+};
+
+describe('fmtTokens', () => {
+  it('formats totals compactly', () => {
+    expect(fmtTokens(null)).toBe('–');
+    expect(fmtTokens({ input: 900, output: 50, cacheRead: 0, cacheWrite: 0 })).toBe('950');
+    expect(fmtTokens({ input: 30, output: 8, cacheRead: 1200, cacheWrite: 0 })).toBe('1.2k');
+    expect(fmtTokens({ input: 1_200_000, output: 0, cacheRead: 0, cacheWrite: 0 })).toBe('1.2M');
+  });
+});
+
+describe('verdict', () => {
+  it('counts flagged hunks by flag in severity order, omitting zeros', () => {
+    expect(verdict(diff)).toBe('3 hunks across 2 files, 2 need a look: 1 untraced, 1 unrequested, 1 after-correction');
+    const clean = { ...diff, files: diff.files.map((f) => ({ ...f, hunks: f.hunks.map((h) => ({ ...h, flags: [] })) })) };
+    expect(verdict(clean)).toBe('3 hunks across 2 files, nothing flagged');
+    expect(verdict({ ...diff, files: [], totals: { ...diff.totals, files: 0, hunks: 0 } })).toBe('no changes');
+  });
+});
+
+describe('renderTerminal', () => {
+  it('prints flagged hunks worst-first with provenance, then an unflagged summary', () => {
+    const out = renderTerminal(diff, { color: false, all: false });
+    expect(out).toBe([
+      '3 hunks across 2 files, 2 need a look: 1 untraced, 1 unrequested, 1 after-correction',
+      '',
+      'src/a.ts @@ -5,0 +6,2 @@',
+      '  ! untraced  no structured edit covers these lines',
+      '  (no provenance)',
+      '+x',
+      '+y',
+      '',
+      'docs/notes.md @@ -0,0 +1 @@',
+      '  ! unrequested  prompt named README.md',
+      '  ! after-correction  prompt begins "no, don\'t touch the readme."',
+      '  turn p3 · claude-code · main agent · 1.2k tokens · 2026-10-01 10:00',
+      "  prompt: no, don't touch the readme. put the docs in docs/notes.md instead",
+      '  reasoning: Moving the notes.',
+      '+# notes',
+      '',
+      'unflagged:',
+      '  src/a.ts  1 hunk  1 turn  120 tokens',
+      '',
+    ].join('\n'));
+  });
+
+  it('prints every hunk with --all and no summary', () => {
+    const out = renderTerminal(diff, { color: false, all: true });
+    expect(out).toContain('src/a.ts @@ -2 +2 @@\n  turn p1 · claude-code · main agent · 120 tokens');
+    expect(out).toContain('-two\n+2\n');
+    expect(out).not.toContain('unflagged:');
+  });
+
+  it('wraps with ANSI only when color is on', () => {
+    expect(renderTerminal(diff, { color: true, all: false })).toContain('\u001b[');
+    expect(renderTerminal(diff, { color: false, all: false })).not.toContain('\u001b[');
+    expect(paint(false).red('x')).toBe('x');
+    expect(paint(true).red('x')).toBe('\u001b[31mx\u001b[39m');
+  });
+});
+
+describe('renderJson', () => {
+  it('round-trips the object with a trailing newline', () => {
+    const s = renderJson(diff);
+    expect(s.endsWith('\n')).toBe(true);
+    expect(JSON.parse(s)).toEqual(diff);
+  });
+});

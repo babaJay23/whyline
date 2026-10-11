@@ -1,7 +1,7 @@
 # whyline — design spec
 
 **Date:** 2026-10-10
-**Status:** approved for planning
+**Status:** implemented in v0.1.0
 **One line:** `whyline` reads the diff you are about to commit and tells you which hunks you never asked for, which came after you corrected the agent, which a subagent wrote, and which it cannot trace. Under each flag it shows the proof: the prompt, the agent's reasoning, the agent, and what the turn cost.
 
 ## 1. Problem

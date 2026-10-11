@@ -104,6 +104,41 @@ describe('whyline (e2e)', () => {
     expect(miss.err).toContain('e2e'); // lists the sessions it did find
   });
 
+  it('measures a two-ref range from the merge base, so edits on a branch are not lost when main moves on', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    r.git('checkout', '-q', '-b', 'work');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now(), 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    r.write('f.txt', 'b\n');
+    await settle();
+    r.commit('agent change on work');
+    r.git('checkout', '-q', 'main');
+    await settle();
+    r.write('other.txt', 'teammate\n');
+    r.commit('main moved on');
+    r.git('checkout', '-q', 'work');
+
+    const o = io(r.dir, home);
+    expect(await run(['main...work', '--all'], o)).toBe(0);
+    expect(o.out).toContain('1 hunk across 1 file, nothing flagged');
+    expect(o.out).toContain('prompt: edit f.txt');
+  });
+
+  it('skips untracked binary files', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now(), 'hello', []);
+    writeFileSync(join(r.dir, 'img.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x1a, 0xff, 0xfe]));
+    r.write('notes.txt', 'text\n');
+    const o = io(r.dir, home);
+    expect(await run(['--json'], o)).toBe(0);
+    expect(JSON.parse(o.out).files.map((f: { path: string }) => f.path)).toEqual(['notes.txt']);
+  });
+
   it('lists sessions and runs doctor', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     r.commit('base');

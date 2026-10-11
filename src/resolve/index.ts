@@ -21,6 +21,11 @@ export interface EventIndex {
   harnessOf: Map<string, Harness>;
 }
 
+/** Turn ids are only unique within a session; both adapters even share the default 'turn-0'. */
+export function turnKey(sessionId: string, turnId: string): string {
+  return `${sessionId}\u0000${turnId}`;
+}
+
 export function relPath(repoRoot: string, abs: string): string | null {
   const root = repoRoot.replace(/[\\/]+$/, '');
   const a = abs.replace(/\\/g, '/');
@@ -43,10 +48,11 @@ export function indexEvents(sessions: Session[], repoRoot: string): EventIndex {
   for (const { ref, events } of sessions) {
     harnessOf.set(ref.id, ref.harness);
     const turn = (id: string, at: number): Turn => {
-      let t = turns.get(id);
+      const key = turnKey(ref.id, id);
+      let t = turns.get(key);
       if (!t) {
         t = { id, sessionId: ref.id, harness: ref.harness, prompt: null, reasoning: [], usage: null, interrupted: false, prevInterrupted: false, firstAt: at };
-        turns.set(id, t);
+        turns.set(key, t);
       }
       if (at < t.firstAt) t.firstAt = at;
       return t;

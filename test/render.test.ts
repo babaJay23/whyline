@@ -47,6 +47,8 @@ describe('verdict', () => {
     const clean = { ...diff, files: diff.files.map((f) => ({ ...f, hunks: f.hunks.map((h) => ({ ...h, flags: [] })) })) };
     expect(verdict(clean)).toBe('3 hunks across 2 files, nothing flagged');
     expect(verdict({ ...diff, files: [], totals: { ...diff.totals, files: 0, hunks: 0 } })).toBe('no changes');
+    const one = { ...diff, files: [diff.files[1]!], totals: { ...diff.totals, files: 1, hunks: 2 } };
+    expect(verdict(one)).toBe('2 hunks across 1 file, 1 needs a look: 1 untraced');
   });
 });
 
@@ -58,6 +60,7 @@ describe('renderTerminal', () => {
       '',
       'src/a.ts @@ -5,0 +6,2 @@',
       '  ! untraced  no structured edit covers these lines',
+      '  file differs from what the recorded edits produce; some lines were changed another way',
       '  (no provenance)',
       '+x',
       '+y',
@@ -76,9 +79,18 @@ describe('renderTerminal', () => {
     ].join('\n'));
   });
 
+  it('caps long hunks and notes a file that differs from the replayed edits', () => {
+    const big: AnnotatedHunk = { ...untraced, lines: Array.from({ length: 100 }, (_, i) => ({ text: `l${i}`, provenance: null })) };
+    const d = { ...diff, files: [{ ...diff.files[1]!, hunks: [big] }] };
+    const out = renderTerminal(d, { color: false, all: false });
+    expect(out).toContain('  file differs from what the recorded edits produce; some lines were changed another way');
+    expect(out).toContain('+l39\n  … 60 more lines\n');
+    expect(out).not.toContain('+l40');
+  });
+
   it('prints every hunk with --all and no summary', () => {
     const out = renderTerminal(diff, { color: false, all: true });
-    expect(out).toContain('src/a.ts @@ -2 +2 @@\n  turn p1 · claude-code · main agent · 120 tokens');
+    expect(out).toContain('src/a.ts @@ -2 +2 @@\n  file differs from what the recorded edits produce; some lines were changed another way\n  turn p1 · claude-code · main agent · 120 tokens');
     expect(out).toContain('-two\n+2\n');
     expect(out).not.toContain('unflagged:');
   });

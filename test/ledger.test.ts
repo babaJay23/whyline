@@ -82,7 +82,21 @@ describe('replay', () => {
     const e = edit('f', { type: 'replace', old: 'c\n', new: 'c\nd\n', all: false });
     const t = replay('a\nb\nc\n', [e]);
     expect(t.driftedAt).toBeNull();
-    expect(t.lines.map((l) => [l.text, l.editId])).toEqual([['a', null], ['b', null], ['c', e.id], ['d', e.id]]);
+    expect(t.lines.map((l) => [l.text, l.editId])).toEqual([['a', null], ['b', null], ['c', null], ['d', e.id]]); // c was context, only d was written
+  });
+
+  it('keeps the following line when old ends in a newline and new does not', () => {
+    const e = edit('f', { type: 'replace', old: 'b\n', new: 'B', all: false });
+    expect(tableText(replay('a\nb\nc\n', [e]))).toBe('a\nBc\n');
+    const join = edit('f', { type: 'replace', old: '\nb\n', new: '', all: false });
+    expect(tableText(replay('a\nb\nc\n', [join]))).toBe('ac\n');
+  });
+
+  it('leaves attribution of unchanged context lines with the edit that wrote them', () => {
+    const w = edit('f', { type: 'write', content: 'one\ntwo\nthree\nfour\n' });
+    const e = edit('f', { type: 'replace', old: 'two\nthree\nfour', new: 'two\nTHREE\nfour', all: false });
+    const t = replay(null, [w, e]);
+    expect(t.lines.map((l) => [l.text, l.editId])).toEqual([['one', w.id], ['two', w.id], ['THREE', e.id], ['four', w.id]]);
   });
 
   it('tableText of an empty table is empty', () => {

@@ -49,9 +49,14 @@ export function readWorkingFile(root: string, path: string): string | null {
   }
 }
 
+export function mergeBase(root: string, a: string, b: string): string | null {
+  const out = git(root, ['merge-base', a, b]);
+  return out ? out.trim() : null;
+}
+
 export function parseRange(range: string | null): { base: string; head: string | null } {
   if (!range) return { base: 'HEAD', head: null };
-  const i = range.indexOf('..');
-  if (i === -1) return { base: range, head: null };
-  return { base: range.slice(0, i), head: range.slice(i + 2) || 'HEAD' };
+  const m = /^(.*?)\.{2,3}(.*)$/.exec(range);
+  if (!m) return { base: range, head: null };
+  return { base: m[1]!, head: m[2] || 'HEAD' };
 }

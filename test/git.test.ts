@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeRepo } from './helpers/tmp-repo.js';
-import { repoRoot, commitTime, show, diffText, untracked, readWorkingFile, parseRange } from '../src/git.js';
+import { repoRoot, commitTime, show, diffText, untracked, readWorkingFile, parseRange, mergeBase } from '../src/git.js';
 
 describe('git', () => {
   it('finds the repo root from a subdirectory', () => {
@@ -44,9 +44,23 @@ describe('git', () => {
     expect(readWorkingFile(r.dir, 'nope')).toBeNull();
   });
 
-  it('parses ranges', () => {
+  it('parses ranges, including the three-dot form', () => {
     expect(parseRange(null)).toEqual({ base: 'HEAD', head: null });
     expect(parseRange('main..HEAD')).toEqual({ base: 'main', head: 'HEAD' });
+    expect(parseRange('main...HEAD')).toEqual({ base: 'main', head: 'HEAD' });
     expect(parseRange('abc123')).toEqual({ base: 'abc123', head: null });
+  });
+
+  it('finds the merge base of two refs', () => {
+    const r = makeRepo({ 'f': '1\n' });
+    const a = r.commit('a');
+    r.git('checkout', '-q', '-b', 'work');
+    r.write('f', '2\n');
+    r.commit('b');
+    r.git('checkout', '-q', 'main');
+    r.write('f', '3\n');
+    r.commit('c');
+    expect(mergeBase(r.dir, 'main', 'work')).toBe(a);
+    expect(mergeBase(r.dir, 'main', 'nope')).toBeNull();
   });
 });

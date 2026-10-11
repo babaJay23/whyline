@@ -18,7 +18,7 @@ export function verdict(d: AnnotatedDiff): string {
   if (flaggedHunks === 0) return `${head}, nothing flagged`;
   const count = (flag: string) => hunks.reduce((n, h) => n + h.flags.filter((x) => x.flag === flag).length, 0);
   const parts = FLAG_ORDER.map((f) => [count(f), f] as const).filter(([n]) => n > 0).map(([n, f]) => `${n} ${f}`);
-  return `${head}, ${flaggedHunks} need a look: ${parts.join(', ')}`;
+  return `${head}, ${flaggedHunks} ${flaggedHunks === 1 ? 'needs' : 'need'} a look: ${parts.join(', ')}`;
 }
 
 export function renderTerminal(d: AnnotatedDiff, opts: { color: boolean; all: boolean }): string {
@@ -44,9 +44,13 @@ export function renderTerminal(d: AnnotatedDiff, opts: { color: boolean; all: bo
   return out.join('\n');
 }
 
+export const MAX_HUNK_LINES = 40;
+export const MISMATCH_NOTE = 'file differs from what the recorded edits produce; some lines were changed another way';
+
 function hunkBlock(f: AnnotatedFile, h: AnnotatedHunk, c: ReturnType<typeof paint>): string[] {
   const lines: string[] = [`${c.bold(f.path)} ${c.cyan(range(h))}`];
   for (const fl of h.flags) lines.push(`  ${c.red('!')} ${c.yellow(fl.flag)}  ${fl.detail}`);
+  if (f.ledgerMismatch) lines.push(c.dim(`  ${MISMATCH_NOTE}`));
   if (h.lead) {
     const p = h.lead;
     const who = p.agentId === p.sessionId ? 'main agent' : `subagent ${p.agentName ?? p.agentId}`;
@@ -57,8 +61,9 @@ function hunkBlock(f: AnnotatedFile, h: AnnotatedHunk, c: ReturnType<typeof pain
   } else {
     lines.push(c.dim('  (no provenance)'));
   }
-  for (const r of h.removed) lines.push(c.red(`-${r}`));
-  for (const l of h.lines) lines.push(c.green(`+${l.text}`));
+  const body = [...h.removed.map((r) => c.red(`-${r}`)), ...h.lines.map((l) => c.green(`+${l.text}`))];
+  lines.push(...body.slice(0, MAX_HUNK_LINES));
+  if (body.length > MAX_HUNK_LINES) lines.push(c.dim(`  … ${body.length - MAX_HUNK_LINES} more lines`));
   return lines;
 }
 

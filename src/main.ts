@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util';
 import { writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { adapters } from './adapters/index.js';
-import { commitTime, diffText, lsFiles, parseRange, readWorkingFile, repoRoot, show, untracked } from './git.js';
+import { commitTime, diffText, lsFiles, mergeBase, parseRange, readWorkingFile, repoRoot, show, untracked } from './git.js';
 import { renderHtml } from './render/html.js';
 import { renderJson } from './render/json.js';
 import { renderTerminal, verdict } from './render/terminal.js';
@@ -76,7 +76,9 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
   const { base, head } = parseRange(range);
   let window: Window;
   try {
-    window = { from: commitTime(root, base), to: head ? commitTime(root, head) : io.now() };
+    // For two refs the branch's work began at their merge base, not at wherever base points today.
+    const from = head ? mergeBase(root, base, head) ?? base : base;
+    window = { from: commitTime(root, from), to: head ? commitTime(root, head) : io.now() };
   } catch {
     io.stderr.write(`whyline: unknown revision in "${range}"\n`);
     return 1;
@@ -91,7 +93,7 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
   if (!head) {
     for (const p of untracked(root)) {
       const content = readWorkingFile(root, p);
-      if (content !== null) diffs.push(syntheticAdded(p, content));
+      if (content !== null && !looksBinary(content)) diffs.push(syntheticAdded(p, content));
     }
   }
   if (diffs.length === 0) { io.stdout.write('no changes\n'); return 2; }
@@ -166,6 +168,11 @@ function noSessions(all: SessionRef[], home: string, window: Window | null): str
   }
   const span = window ? ` between ${new Date(window.from).toISOString()} and ${new Date(window.to).toISOString()}` : '';
   return `whyline: no matching sessions${span}; found these for this repo:\n${all.map(line).join('\n')}\nuse --since or --session to pick one\n`;
+}
+
+/** Git's own heuristic: a NUL byte in the first 8 KB means binary. */
+function looksBinary(content: string): boolean {
+  return content.slice(0, 8192).includes('\u0000');
 }
 
 function parseSince(s: string, now: number): number | null {

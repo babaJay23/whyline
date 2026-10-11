@@ -1,6 +1,6 @@
 import type { AnnotatedDiff, AnnotatedFile, AnnotatedHunk } from '../types.js';
 import { FLAG_ORDER } from '../resolve/flags.js';
-import { fmtTokens, verdict } from './terminal.js';
+import { MISMATCH_NOTE, fmtTokens, verdict } from './terminal.js';
 
 export function renderHtml(d: AnnotatedDiff): string {
   const v = verdict(d);
@@ -60,6 +60,7 @@ ${p.reasoning ? `<details><summary>reasoning</summary><pre>${esc(p.reasoning.tex
   return `<article class="hunk" id="f-${esc(f.path)}">
 <h2>${esc(f.path)} <code>@@ -${seg(h.oldStart, h.oldLines)} +${seg(h.newStart, h.newLines)} @@</code></h2>
 ${chips ? `<p class="flags">${chips}</p>` : ''}
+${f.ledgerMismatch ? `<p class="prov">${MISMATCH_NOTE}</p>` : ''}
 ${prov}
 <pre class="diff">${code}</pre>
 </article>`;

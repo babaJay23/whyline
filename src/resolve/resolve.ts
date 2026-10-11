@@ -1,7 +1,8 @@
 import type { AnnotatedDiff, AnnotatedFile, AnnotatedHunk, AnnotatedLine, EditEvent, FileDiff, Flag, Hunk, LineTable, Provenance, Session, Usage, Window } from '../types.js';
 import { ZERO_USAGE, addUsage } from '../types.js';
 import { replay, tableText } from '../ledger/ledger.js';
-import { indexEvents, selectEdits, type EventIndex, type Turn } from './index.js';
+import { indexEvents, selectEdits, turnKey, type EventIndex, type Turn } from './index.js';
+import { splitLines } from './diff.js';
 import { FLAG_ORDER, flagHunk, type RepoFiles } from './flags.js';
 
 export interface ResolveInput {
@@ -26,12 +27,15 @@ export function resolve(input: ResolveInput): AnnotatedDiff {
     for (const h of f.hunks) {
       hunks++;
       for (const hit of h.flags) flagged[hit.flag]++;
-    }
-    for (const t of f.turnIds) {
-      if (costedTurns.has(t)) continue;
-      costedTurns.add(t);
-      const u = ix.turns.get(t)?.usage;
-      if (u) cost = addUsage(cost, u);
+      for (const l of h.lines) {
+        const p = l.provenance;
+        if (!p) continue;
+        const key = turnKey(p.sessionId, p.turnId);
+        if (costedTurns.has(key)) continue;
+        costedTurns.add(key);
+        const u = ix.turns.get(key)?.usage;
+        if (u) cost = addUsage(cost, u);
+      }
     }
   }
   return {
@@ -49,52 +53,58 @@ function resolveFile(d: FileDiff, ix: EventIndex, input: ResolveInput): Annotate
   const base = d.status === 'added' ? null : input.baseText(d.oldPath ?? d.path);
   const table = replay(base, edits);
   const actual = d.status === 'deleted' ? '' : input.headText(d.path) ?? '';
-  const ledgerMismatch = strip(tableText(table)) !== strip(actual);
+  const ledgerMismatch = normalize(tableText(table)) !== normalize(actual);
 
-  const hunks = d.hunks.map((h) => resolveHunk(h, d.path, table, edits, ix, input.repo));
-  const turnIds = [...new Set(hunks.flatMap((h) => h.lines.map((l) => l.provenance?.turnId)).filter((t): t is string => !!t))];
+  const used = new Set<number>();
+  const hunks = d.hunks.map((h) => resolveHunk(h, d.path, table, edits, ix, input.repo, used));
+  const keys = new Map<string, string>();
+  for (const h of hunks) for (const l of h.lines) if (l.provenance) keys.set(turnKey(l.provenance.sessionId, l.provenance.turnId), l.provenance.turnId);
   let cost: Usage | null = null;
-  for (const t of turnIds) {
-    const u = ix.turns.get(t)?.usage;
+  for (const key of keys.keys()) {
+    const u = ix.turns.get(key)?.usage;
     if (u) cost = addUsage(cost ?? ZERO_USAGE, u);
   }
-  return { path: d.path, status: d.status, hunks, turnIds, cost, ledgerMismatch, driftedAt: table.driftedAt };
+  return { path: d.path, status: d.status, hunks, turnIds: [...keys.values()], cost, ledgerMismatch, driftedAt: table.driftedAt };
 }
 
-function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEvent[], ix: EventIndex, repo: RepoFiles): AnnotatedHunk {
-  const byText = new Map<string, number[]>();
-  table.lines.forEach((l, i) => {
-    const k = strip(l.text);
-    const arr = byText.get(k) ?? [];
-    arr.push(i);
-    byText.set(k, arr);
-  });
+const NEAR = 3;
 
+/**
+ * Each diff line claims at most one ledger line: first the same position, then a
+ * single matching line within NEAR of it. A duplicate typed by hand therefore
+ * stays untraced instead of borrowing the agent's receipt.
+ */
+function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEvent[], ix: EventIndex, repo: RepoFiles, used: Set<number>): AnnotatedHunk {
   const lines: AnnotatedLine[] = h.added.map((text, i) => {
     const want = strip(text);
     const at = h.newStart - 1 + i;
     let idx: number | null = null;
-    if (table.lines[at] && strip(table.lines[at]!.text) === want) idx = at;
+    if (!used.has(at) && table.lines[at] && strip(table.lines[at]!.text) === want) idx = at;
     else {
-      const cands = byText.get(want);
-      if (cands && cands.length === 1) idx = cands[0]!;
+      const near: number[] = [];
+      for (let j = Math.max(0, at - NEAR); j <= Math.min(table.lines.length - 1, at + NEAR); j++) {
+        if (!used.has(j) && strip(table.lines[j]!.text) === want) near.push(j);
+      }
+      if (near.length === 1) idx = near[0]!;
     }
-    const editId = idx === null ? null : table.lines[idx]!.editId;
+    if (idx === null) return { text, provenance: null };
+    used.add(idx);
+    const editId = table.lines[idx]!.editId;
     const edit = editId ? fileEdits.find((e) => e.id === editId) ?? null : null;
     return { text, provenance: edit ? provenance(edit, ix) : null };
   });
 
   const lead = pickLead(lines);
-  const turnIds = new Set(lines.map((l) => l.provenance?.turnId).filter(Boolean));
+  const turnIds = new Set(lines.filter((l) => l.provenance).map((l) => turnKey(l.provenance!.sessionId, l.provenance!.turnId)));
   const otherTurns = Math.max(0, turnIds.size - (lead ? 1 : 0));
-  const turn: Turn | null = lead ? ix.turns.get(lead.turnId) ?? null : null;
+  const turn: Turn | null = lead ? ix.turns.get(turnKey(lead.sessionId, lead.turnId)) ?? null : null;
   const flags = flagHunk({ file, lines, lead, turn, table, fileEdits, shells: ix.shells, repo });
 
   return { oldStart: h.oldStart, oldLines: h.oldLines, newStart: h.newStart, newLines: h.newLines, removed: h.removed, lines, lead, otherTurns, flags };
 }
 
 function provenance(e: EditEvent, ix: EventIndex): Provenance {
-  const turn = ix.turns.get(e.turnId);
+  const turn = ix.turns.get(turnKey(e.sessionId, e.turnId));
   const before = turn?.reasoning.filter((r) => r.at <= e.at) ?? [];
   const reasoning = before.filter((r) => r.visible).at(-1) ?? before.at(-1) ?? null;
   const agentName = e.agentId === e.sessionId ? null : ix.agents.get(e.agentId)?.name ?? null;
@@ -131,4 +141,9 @@ function pickLead(lines: AnnotatedLine[]): Provenance | null {
 
 function strip(s: string): string {
   return s.endsWith('\r') ? s.slice(0, -1) : s;
+}
+
+/** Line-wise comparison that ignores a missing final newline and CRLF endings. */
+function normalize(s: string): string {
+  return splitLines(s).map(strip).join('\n');
 }

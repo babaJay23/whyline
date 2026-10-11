@@ -98,6 +98,8 @@ describe('flagHunk', () => {
     expect(flags(facts({ fileEdits: three }))).toEqual(['churned']);
     expect(flags(facts({ fileEdits: three.slice(0, 2) }))).toEqual([]);
     expect(flags(facts({ lines: [{ text: 'x', provenance: prov() }], fileEdits: three }))).toEqual([]); // too short to count
+    const context = (turnId: string, at: number): EditEvent => ({ ...edit(turnId, 'y', at), op: { type: 'replace', old: `${text}\nold${at}`, new: `${text}\nnew${at}`, all: false } });
+    expect(flags(facts({ fileEdits: [context('t1', 10), context('t2', 20), context('t3', 30)] }))).toEqual([]); // the line was context, not rewritten
   });
 
   it('subagent when the lead agent is not the session main agent', () => {

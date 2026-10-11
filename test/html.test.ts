@@ -19,8 +19,8 @@ describe('renderHtml', () => {
 
   it('is a complete document with the verdict in the title and body', () => {
     expect(html.startsWith('<!doctype html>')).toBe(true);
-    expect(html).toContain('<title>whyline: 2 hunks across 1 file, 1 need a look: 1 untraced</title>');
-    expect(html).toContain('1 need a look');
+    expect(html).toContain('<title>whyline: 2 hunks across 1 file, 1 needs a look: 1 untraced</title>');
+    expect(html).toContain('1 needs a look');
   });
 
   it('escapes paths, code and prompts', () => {

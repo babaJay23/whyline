@@ -93,6 +93,45 @@ describe('resolve', () => {
     expect(out.files[0]!.hunks[0]!.lines[0]!.provenance?.editId).toBe('e1');
   });
 
+  it('does not attribute a hand-written duplicate of an agent line to the agent', () => {
+    const out = run({ headText: () => 'one\n2\nthree\n2\n', diffs: parseUnifiedDiff('diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -2 +2 @@\n-two\n+2\n@@ -3,0 +4 @@\n+2\n') });
+    const [h1, h2] = out.files[0]!.hunks;
+    expect(h1!.lines[0]!.provenance?.editId).toBe('e1');
+    expect(h2!.lines[0]!.provenance).toBeNull();
+    expect(out.files[0]!.ledgerMismatch).toBe(true);
+  });
+
+  it('only matches shifted lines within three lines of their position', () => {
+    const far = 'p\nq\nr\ns\nt\none\n2\nthree\n';
+    const out = run({ headText: () => far, diffs: parseUnifiedDiff('diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -0,0 +1,5 @@\n+p\n+q\n+r\n+s\n+t\n@@ -2 +7 @@\n-two\n+2\n') });
+    expect(out.files[0]!.hunks[1]!.lines[0]!.provenance).toBeNull(); // shifted by 5, too far to trust
+  });
+
+  it('does not report a mismatch for a file without a trailing newline', () => {
+    const out = run({ baseText: () => 'one\ntwo\nthree', headText: () => 'one\n2\nthree' });
+    expect(out.files[0]!.ledgerMismatch).toBe(false);
+  });
+
+  it('keeps turns from different sessions apart even when their ids collide', () => {
+    const other: SessionRef = { ...ref, id: 's2', harness: 'codex' };
+    const evs2: Event[] = [
+      { kind: 'prompt', id: 'p', sessionId: 's2', agentId: 's2', turnId: 't1', at: 300, text: 'write n.ts' },
+      { kind: 'edit', id: 'w2', sessionId: 's2', agentId: 's2', turnId: 't1', at: 310, tool: 'apply_patch', file: '/repo/n.ts', op: { type: 'write', content: 'n\n' } },
+      { kind: 'usage', id: 'u2', sessionId: 's2', agentId: 's2', turnId: 't1', at: 320, input: 7, output: 7, cacheRead: 0, cacheWrite: 0 },
+    ];
+    const out = run({
+      diffs: [...diff, syntheticAdded('n.ts', 'n\n')],
+      sessions: [session(events), { ref: other, events: evs2, skipped: 0 }],
+      headText: (p) => (p === 'a.ts' ? afterA : 'n\n'),
+      repo: repoOf({ 'a.ts': afterA, 'n.ts': 'n\n' }),
+    });
+    const [a, n] = out.files;
+    expect(a!.hunks[0]!.lead?.turnCost).toEqual({ input: 10, output: 5, cacheRead: 0, cacheWrite: 0 });
+    expect(n!.hunks[0]!.lead).toMatchObject({ harness: 'codex', sessionId: 's2', turnCost: { input: 7, output: 7, cacheRead: 0, cacheWrite: 0 } });
+    expect(n!.hunks[0]!.lead?.prompt.text).toBe('write n.ts');
+    expect(out.totals.cost).toEqual({ input: 17, output: 12, cacheRead: 0, cacheWrite: 0 });
+  });
+
   it('picks the lead by majority and counts other turns', () => {
     const evs: Event[] = [
       { kind: 'prompt', id: 'p1', ...base, turnId: 't1', at: 200, text: 'write f.ts' },

@@ -3,8 +3,9 @@ import { basename, join } from 'node:path';
 import type { Adapter, EditOp, Event, SessionRef } from '../types.js';
 import { readJsonl, obj, str, num } from './jsonl.js';
 
+/** Claude Code names a project directory by replacing every non-alphanumeric character with a dash. */
 export function slug(absPath: string): string {
-  return absPath.replace(/[\\/]/g, '-');
+  return absPath.replace(/[^a-zA-Z0-9]/g, '-');
 }
 
 function real(p: string): string {

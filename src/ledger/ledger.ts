@@ -45,18 +45,20 @@ function applyReplace(lines: LedgerLine[], old: string, neu: string, all: boolea
   let cur = lines;
   while (from !== -1) {
     const to = from + old.length;
-    const startLine = lineIndexAt(curText, from);
-    const endLine = lineIndexAt(curText, Math.max(from, to - 1));
     const newText = curText.slice(0, from) + neu + curText.slice(to);
     const newLines = splitLines(newText);
-    // Lines before startLine and after endLine are untouched; everything between
-    // (inclusive) was produced by this replacement.
-    const tailCount = cur.length - endLine - 1;
+    const startLine = lineIndexAt(curText, from);
+    // The line at `to` survives intact only if the span ended at a line boundary
+    // and the replacement text also ends at one; otherwise it is joined into the edit.
+    const endsAtBoundary = atLineStart(curText, to) && atLineStart(newText, from + neu.length);
+    const endLine = Math.min(cur.length - 1, Math.max(startLine, endsAtBoundary ? lineIndexAt(curText, to - 1) : lineIndexAt(curText, to)));
     const headCount = startLine;
+    const tailCount = Math.max(0, cur.length - endLine - 1);
     const produced = newLines.length - headCount - tailCount;
-    const out: LedgerLine[] = [];
-    for (let i = 0; i < headCount; i++) out.push(cur[i]!);
+    const oldSpan = cur.slice(startLine, endLine + 1);
+    const out: LedgerLine[] = cur.slice(0, headCount);
     for (let i = 0; i < produced; i++) out.push({ text: newLines[headCount + i]!, editId });
+    keepUnchangedContext(out, headCount, produced, oldSpan);
     for (let i = 0; i < tailCount; i++) out.push(cur[endLine + 1 + i]!);
     cur = out;
     curText = newText;
@@ -64,6 +66,27 @@ function applyReplace(lines: LedgerLine[], old: string, neu: string, all: boolea
     from = curText.indexOf(old, from + neu.length);
   }
   return cur;
+}
+
+/**
+ * Harness edits carry unchanged neighbouring lines for uniqueness. Those lines
+ * were not rewritten, so they keep the attribution they already had.
+ */
+function keepUnchangedContext(out: LedgerLine[], offset: number, produced: number, oldSpan: LedgerLine[]): void {
+  let lead = 0;
+  while (lead < produced && lead < oldSpan.length && out[offset + lead]!.text === oldSpan[lead]!.text) {
+    out[offset + lead] = oldSpan[lead]!;
+    lead++;
+  }
+  let trail = 0;
+  while (trail < produced - lead && trail < oldSpan.length - lead && out[offset + produced - 1 - trail]!.text === oldSpan[oldSpan.length - 1 - trail]!.text) {
+    out[offset + produced - 1 - trail] = oldSpan[oldSpan.length - 1 - trail]!;
+    trail++;
+  }
+}
+
+function atLineStart(text: string, offset: number): boolean {
+  return offset === 0 || text.charCodeAt(offset - 1) === 10;
 }
 
 function lineIndexAt(text: string, offset: number): number {

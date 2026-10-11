@@ -19,6 +19,7 @@ describe('readJsonl', () => {
 describe('slug', () => {
   it('replaces path separators with dashes', () => {
     expect(slug('/Users/me/Documents/repo')).toBe('-Users-me-Documents-repo');
+    expect(slug('/Users/me/my_app.v2 beta')).toBe('-Users-me-my-app-v2-beta'); // Claude Code replaces every non-alphanumeric
   });
 });
 

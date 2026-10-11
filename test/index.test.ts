@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { findSessions } from '../src/sessions.js';
-import { indexEvents, relPath, selectEdits } from '../src/resolve/index.js';
+import { indexEvents, relPath, selectEdits, turnKey } from '../src/resolve/index.js';
 import type { EditEvent } from '../src/types.js';
 
 const HOME = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'home');
@@ -31,18 +31,18 @@ describe('selectEdits', () => {
 describe('indexEvents', () => {
   it('builds turns with prompt, reasoning, summed usage and interrupt flags', async () => {
     const ix = await index();
-    const p1 = ix.turns.get('p1')!;
+    const p1 = ix.turns.get(turnKey('sess-1', 'p1'))!;
     expect(p1.prompt?.text).toMatch(/^add a TRANSCRIPTION/);
     expect(p1.reasoning.map((r) => r.visible)).toEqual([false, true, true]);
     expect(p1.usage).toEqual({ input: 160, output: 39, cacheRead: 1000, cacheWrite: 50 });
     expect(p1.interrupted).toBe(false);
-    const p2 = ix.turns.get('p2')!;
+    const p2 = ix.turns.get(turnKey('sess-1', 'p2'))!;
     expect(p2.prompt).toBeNull();
     expect(p2.interrupted).toBe(true);
-    const p3 = ix.turns.get('p3')!;
+    const p3 = ix.turns.get(turnKey('sess-1', 'p3'))!;
     expect(p3.prevInterrupted).toBe(true);
     expect(p1.prevInterrupted).toBe(false);
-    expect(ix.turns.get('ct2')!.interrupted).toBe(true);
+    expect(ix.turns.get(turnKey('cx-1', 'ct2'))!.interrupted).toBe(true);
   });
 
   it('groups edits by repo-relative path across harnesses', async () => {

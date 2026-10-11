@@ -52,12 +52,11 @@ export function flagHunk(f: HunkFacts): FlagHit[] {
     push('drifted', `an earlier edit at ${new Date(f.table.driftedAt).toISOString()} did not match the file; attribution after it is best-effort`);
   }
 
-  const needles = f.lines.map((l) => l.text.trim()).filter((t) => t.length >= CHURN_MIN_CHARS);
-  if (needles.length) {
+  const needles = new Set(f.lines.map((l) => l.text.trim()).filter((t) => t.length >= CHURN_MIN_CHARS));
+  if (needles.size) {
     const turns = new Set<string>();
     for (const e of f.fileEdits) {
-      const hay = e.op.type === 'replace' ? e.op.old + '\n' + e.op.new : e.op.type === 'write' ? e.op.content : '';
-      if (needles.some((n) => hay.includes(n))) turns.add(e.turnId);
+      if (changedLines(e).some((l) => needles.has(l))) turns.add(e.turnId);
     }
     if (turns.size >= CHURN_TURNS) push('churned', `rewritten across ${turns.size} turns`);
   }
@@ -67,6 +66,14 @@ export function flagHunk(f: HunkFacts): FlagHit[] {
   }
 
   return hits.sort((a, b) => FLAG_ORDER.indexOf(a.flag) - FLAG_ORDER.indexOf(b.flag));
+}
+
+/** Lines an edit actually wrote: context lines carried for uniqueness do not count. */
+function changedLines(e: EditEvent): string[] {
+  if (e.op.type === 'write') return e.op.content.split('\n').map((l) => l.trim());
+  if (e.op.type !== 'replace') return [];
+  const before = new Set(e.op.old.split('\n').map((l) => l.trim()));
+  return e.op.new.split('\n').map((l) => l.trim()).filter((l) => !before.has(l));
 }
 
 /** Repo paths a prompt names, by exact relative path or by basename. */

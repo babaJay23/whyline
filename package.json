@@ -1,0 +1,24 @@
+{
+  "name": "whyline",
+  "version": "0.1.0",
+  "description": "git blame for AI agents: which prompt wrote this line, what the agent was thinking, and what it cost",
+  "license": "MIT",
+  "repository": "github:babaJay23/whyline",
+  "type": "module",
+  "bin": { "whyline": "dist/cli.js" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "npm run typecheck && npm test && sh scripts/no-network.sh",
+    "prepublishOnly": "npm run check && npm run build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -29,7 +29,7 @@ export function flagHunk(f: HunkFacts): FlagHit[] {
   const hits: FlagHit[] = [];
   const push = (flag: Flag, detail: string) => hits.push({ flag, detail });
 
-  if (f.lines.some((l) => l.provenance === null)) {
+  if (f.lines.some((l) => l.provenance === null) || (f.lines.length === 0 && f.lead === null)) {
     const sh = f.shells.find((s) => s.touches.some((t) => f.file === t || f.file.endsWith('/' + t) || t.endsWith('/' + f.file) || t === basename(f.file)));
     push('untraced', sh ? `shell in turn ${sh.turnId} mentioned this file: ${sh.command.slice(0, 60)}` : 'no structured edit covers these lines');
   }

@@ -132,6 +132,20 @@ describe('resolve', () => {
     expect(out.totals.cost).toEqual({ input: 17, output: 12, cacheRead: 0, cacheWrite: 0 });
   });
 
+  it('flags a deletion no edit accounts for, and credits one the agent made', () => {
+    const del = parseUnifiedDiff('diff --git a/gone.ts b/gone.ts\ndeleted file mode 100644\n--- a/gone.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-bye\n');
+    const byHand = run({ diffs: del, baseText: () => 'bye\n', headText: () => null, repo: repoOf({}) });
+    expect(byHand.files[0]!.hunks[0]!.flags.map((f) => f.flag)).toEqual(['untraced']);
+    const evs: Event[] = [
+      { kind: 'prompt', id: 'p', ...base, turnId: 't1', at: 200, text: 'remove gone.ts' },
+      { kind: 'edit', id: 'rm1', ...base, turnId: 't1', at: 210, tool: 'apply_patch', file: '/repo/gone.ts', op: { type: 'delete' } },
+    ];
+    const byAgent = run({ diffs: del, sessions: [session(evs)], baseText: () => 'bye\n', headText: () => null, repo: repoOf({}) });
+    const h = byAgent.files[0]!.hunks[0]!;
+    expect(h.flags).toEqual([]);
+    expect(h.lead?.editId).toBe('rm1');
+  });
+
   it('picks the lead by majority and counts other turns', () => {
     const evs: Event[] = [
       { kind: 'prompt', id: 'p1', ...base, turnId: 't1', at: 200, text: 'write f.ts' },

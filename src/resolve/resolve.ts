@@ -94,13 +94,27 @@ function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEve
     return { text, provenance: edit ? provenance(edit, ix) : null };
   });
 
-  const lead = pickLead(lines);
+  const lead = pickLead(lines) ?? (h.added.length === 0 ? removalLead(h.removed, fileEdits, ix) : null);
   const turnIds = new Set(lines.filter((l) => l.provenance).map((l) => turnKey(l.provenance!.sessionId, l.provenance!.turnId)));
   const otherTurns = Math.max(0, turnIds.size - (lead ? 1 : 0));
   const turn: Turn | null = lead ? ix.turns.get(turnKey(lead.sessionId, lead.turnId)) ?? null : null;
   const flags = flagHunk({ file, lines, lead, turn, table, fileEdits, shells: ix.shells, repo });
 
   return { oldStart: h.oldStart, oldLines: h.oldLines, newStart: h.newStart, newLines: h.newLines, removed: h.removed, lines, lead, otherTurns, flags };
+}
+
+/**
+ * Removed lines are not in the ledger, so a hunk that only deletes is credited to
+ * the last edit that deleted the file or whose replacement dropped exactly those lines.
+ */
+function removalLead(removed: string[], fileEdits: EditEvent[], ix: EventIndex): Provenance | null {
+  const gone = removed.map(strip).join('\n');
+  for (let i = fileEdits.length - 1; i >= 0; i--) {
+    const e = fileEdits[i]!;
+    if (e.op.type === 'delete') return provenance(e, ix);
+    if (e.op.type === 'replace' && gone && e.op.old.includes(gone) && !e.op.new.includes(gone)) return provenance(e, ix);
+  }
+  return null;
 }
 
 function provenance(e: EditEvent, ix: EventIndex): Provenance {

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { resolve } from '../src/resolve/resolve.js';
 import { syntheticAdded, parseUnifiedDiff } from '../src/resolve/diff.js';
 import type { RepoFiles } from '../src/resolve/flags.js';
+import { PRICES } from '../src/pricing.js';
 import type { Event, Session, SessionRef } from '../src/types.js';
 
 const ref: SessionRef = { harness: 'claude-code', id: 's1', path: '/x', cwd: '/repo', startedAt: 100, endedAt: 900 };
@@ -36,7 +37,7 @@ describe('resolve', () => {
     });
 
   it('attributes a changed line to the edit, prompt, reasoning and cost of its turn', () => {
-    const out = run({ now: 12345 });
+    const out = run({ now: 12345, prices: PRICES });
     expect(out.schemaVersion).toBe(1);
     expect(out.generatedAt).toBe(12345);
     const [file] = out.files;
@@ -55,9 +56,13 @@ describe('resolve', () => {
     expect(out.totals.costUsd).toBeCloseTo(p.turnCostUsd!, 10);
     expect(out.totals.unpricedModels).toEqual([]);
     expect(hunk!.flags).toEqual([]);
+    const noPrices = run();
+    expect(noPrices.files[0]!.hunks[0]!.lead?.turnCostUsd).toBeNull();
+    expect(noPrices.files[0]!.costUsd).toBeNull();
+    expect(noPrices.totals.costUsd).toBeNull(); // dollars only appear when a price table is supplied
     expect(file!.cost).toEqual(p.turnCost);
     expect(file!.ledgerMismatch).toBe(false);
-    expect(out.totals).toEqual({ files: 1, hunks: 1, flagged: { untraced: 0, unrequested: 0, 'after-correction': 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 } });
+    expect(out.totals).toEqual({ files: 1, hunks: 1, flagged: { untraced: 0, unrequested: 0, 'after-correction': 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 }, costUsd: 0.000175, unpricedModels: [] });
   });
 
   it('ignores edits outside the window and reports the line untraced', () => {
@@ -163,7 +168,7 @@ describe('resolve', () => {
       { kind: 'edit', id: 'w1', ...base, turnId: 't1', at: 210, tool: 'Write', file: '/repo/n.ts', op: { type: 'write', content: 'n\n' } },
       { kind: 'usage', id: 'u', ...base, turnId: 't1', at: 220, input: 5, output: 5, cacheRead: 0, cacheWrite: 0, model: 'codex-auto-review' },
     ];
-    const out = run({ diffs: [syntheticAdded('n.ts', 'n\n')], sessions: [session(evs)], baseText: () => null, headText: () => 'n\n', repo: repoOf({ 'n.ts': 'n\n' }) });
+    const out = run({ prices: PRICES, diffs: [syntheticAdded('n.ts', 'n\n')], sessions: [session(evs)], baseText: () => null, headText: () => 'n\n', repo: repoOf({ 'n.ts': 'n\n' }) });
     expect(out.files[0]!.hunks[0]!.lead?.turnCostUsd).toBeNull();
     expect(out.totals.costUsd).toBe(0);
     expect(out.totals.unpricedModels).toEqual(['codex-auto-review']);

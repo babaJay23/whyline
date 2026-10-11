@@ -4,6 +4,7 @@ import { replay, tableText } from '../ledger/ledger.js';
 import { indexEvents, selectEdits, turnKey, type EventIndex, type Turn } from './index.js';
 import { splitLines } from '../lines.js';
 import { FLAG_ORDER, flagHunk, latestMention, type RepoFiles } from './flags.js';
+import { estimateUsd, type PriceTable } from '../pricing.js';
 import type { ShellEvent } from '../types.js';
 
 export interface ResolveInput {
@@ -16,6 +17,8 @@ export interface ResolveInput {
   headText(path: string): string | null;
   repo: RepoFiles;
   now?: number;
+  /** When given, turns and files carry USD estimates; otherwise every cost is null. */
+  prices?: PriceTable;
 }
 
 export function resolve(input: ResolveInput): AnnotatedDiff {
@@ -24,6 +27,8 @@ export function resolve(input: ResolveInput): AnnotatedDiff {
   const flagged = Object.fromEntries(FLAG_ORDER.map((f) => [f, 0])) as Record<Flag, number>;
   let hunks = 0;
   let cost: Usage = ZERO_USAGE;
+  let costUsd = 0;
+  const unpriced = new Set<string>();
   const costedTurns = new Set<string>();
   for (const f of files) {
     for (const h of f.hunks) {
@@ -33,8 +38,14 @@ export function resolve(input: ResolveInput): AnnotatedDiff {
         const key = turnKey(p.sessionId, p.turnId);
         if (costedTurns.has(key)) continue;
         costedTurns.add(key);
-        const u = ix.turns.get(key)?.usage;
-        if (u) cost = addUsage(cost, u);
+        const turn = ix.turns.get(key);
+        if (!turn?.usage) continue;
+        cost = addUsage(cost, turn.usage);
+        if (input.prices) {
+          const usd = estimateUsd(turn.usage, turn.model, input.prices);
+          if (usd === null) unpriced.add(turn.model ?? 'unknown model');
+          else costUsd += usd;
+        }
       }
     }
   }
@@ -44,7 +55,7 @@ export function resolve(input: ResolveInput): AnnotatedDiff {
     generatedAt: input.now ?? Date.now(),
     sessions: input.sessions.map((s) => s.ref),
     files,
-    totals: { files: files.length, hunks, flagged, cost },
+    totals: { files: files.length, hunks, flagged, cost, costUsd: input.prices ? costUsd : null, unpricedModels: [...unpriced].sort() },
   };
 }
 
@@ -64,15 +75,19 @@ function resolveFile(d: FileDiff, ix: EventIndex, input: ResolveInput): Annotate
   const ledgerMismatch = normalize(tableText(table)) !== normalize(actual);
 
   const used = new Set<number>();
-  const hunks = d.hunks.map((h) => resolveHunk(h, d.path, table, edits, shells, ix, input.repo, used));
+  const hunks = d.hunks.map((h) => resolveHunk(h, d.path, table, edits, shells, ix, input.repo, used, input.prices ?? null));
   const keys = new Map<string, string>();
   for (const h of hunks) for (const p of hunkProvenance(h)) keys.set(turnKey(p.sessionId, p.turnId), p.turnId);
   let cost: Usage | null = null;
+  let costUsd: number | null = null;
   for (const key of keys.keys()) {
-    const u = ix.turns.get(key)?.usage;
-    if (u) cost = addUsage(cost ?? ZERO_USAGE, u);
+    const turn = ix.turns.get(key);
+    if (!turn?.usage) continue;
+    cost = addUsage(cost ?? ZERO_USAGE, turn.usage);
+    const usd = input.prices ? estimateUsd(turn.usage, turn.model, input.prices) : null;
+    if (usd !== null) costUsd = (costUsd ?? 0) + usd;
   }
-  return { path: d.path, status: d.status, hunks, turnIds: [...keys.values()], cost, ledgerMismatch, driftedAt: table.driftedAt };
+  return { path: d.path, status: d.status, hunks, turnIds: [...keys.values()], cost, costUsd, ledgerMismatch, driftedAt: table.driftedAt };
 }
 
 const NEAR = 3;
@@ -82,7 +97,7 @@ const NEAR = 3;
  * single matching line within NEAR of it. A duplicate typed by hand therefore
  * stays untraced instead of borrowing the agent's receipt.
  */
-function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEvent[], shells: ShellEvent[], ix: EventIndex, repo: RepoFiles, used: Set<number>): AnnotatedHunk {
+function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEvent[], shells: ShellEvent[], ix: EventIndex, repo: RepoFiles, used: Set<number>, prices: PriceTable | null): AnnotatedHunk {
   const lines: AnnotatedLine[] = h.added.map((text, i) => {
     const want = strip(text);
     const at = h.newStart - 1 + i;
@@ -99,10 +114,10 @@ function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEve
     used.add(idx);
     const editId = table.lines[idx]!.editId;
     const edit = editId ? fileEdits.find((e) => e.id === editId) ?? null : null;
-    return { text, provenance: edit ? provenance(edit, ix) : null };
+    return { text, provenance: edit ? provenance(edit, ix, prices) : null };
   });
 
-  const lead = pickLead(lines) ?? (h.added.length === 0 ? removalLead(h.removed, fileEdits, ix) : null) ?? shellLead(file, shells, ix);
+  const lead = pickLead(lines) ?? (h.added.length === 0 ? removalLead(h.removed, fileEdits, ix, prices) : null) ?? shellLead(file, shells, ix, prices);
   const turnIds = new Set(lines.filter((l) => l.provenance).map((l) => turnKey(l.provenance!.sessionId, l.provenance!.turnId)));
   const otherTurns = Math.max(0, turnIds.size - (lead ? 1 : 0));
   const turn: Turn | null = lead ? ix.turns.get(turnKey(lead.sessionId, lead.turnId)) ?? null : null;
@@ -115,12 +130,12 @@ function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEve
  * Removed lines are not in the ledger, so a hunk that only deletes is credited to
  * the last edit that deleted the file or whose replacement dropped exactly those lines.
  */
-function removalLead(removed: string[], fileEdits: EditEvent[], ix: EventIndex): Provenance | null {
+function removalLead(removed: string[], fileEdits: EditEvent[], ix: EventIndex, prices: PriceTable | null): Provenance | null {
   const gone = removed.map(strip).join('\n');
   for (let i = fileEdits.length - 1; i >= 0; i--) {
     const e = fileEdits[i]!;
-    if (e.op.type === 'delete') return provenance(e, ix);
-    if (e.op.type === 'replace' && gone && e.op.old.includes(gone) && !e.op.new.includes(gone)) return provenance(e, ix);
+    if (e.op.type === 'delete') return provenance(e, ix, prices);
+    if (e.op.type === 'replace' && gone && e.op.old.includes(gone) && !e.op.new.includes(gone)) return provenance(e, ix, prices);
   }
   return null;
 }
@@ -129,12 +144,12 @@ function removalLead(removed: string[], fileEdits: EditEvent[], ix: EventIndex):
  * No structured edit covers the hunk, but a shell command in the window named the
  * file. Its turn is the best available context; the lines themselves stay untraced.
  */
-function shellLead(file: string, shells: ShellEvent[], ix: EventIndex): Provenance | null {
+function shellLead(file: string, shells: ShellEvent[], ix: EventIndex, prices: PriceTable | null): Provenance | null {
   const sh = latestMention(file, shells);
-  return sh ? provenance({ ...sh, tool: 'shell' }, ix) : null;
+  return sh ? provenance({ ...sh, tool: 'shell' }, ix, prices) : null;
 }
 
-function provenance(e: { id: string; sessionId: string; agentId: string; turnId: string; at: number; tool: string }, ix: EventIndex): Provenance {
+function provenance(e: { id: string; sessionId: string; agentId: string; turnId: string; at: number; tool: string }, ix: EventIndex, prices: PriceTable | null): Provenance {
   const turn = ix.turns.get(turnKey(e.sessionId, e.turnId));
   const before = turn?.reasoning.filter((r) => r.at <= e.at) ?? [];
   const reasoning = before.filter((r) => r.visible).at(-1) ?? before.at(-1) ?? null;
@@ -153,6 +168,8 @@ function provenance(e: { id: string; sessionId: string; agentId: string; turnId:
     editId: e.id,
     at: e.at,
     turnCost: turn?.usage ?? null,
+    turnModel: turn?.model ?? null,
+    turnCostUsd: prices && turn?.usage ? estimateUsd(turn.usage, turn.model, prices) : null,
   };
 }
 

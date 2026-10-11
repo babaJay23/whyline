@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { writeFileSync, existsSync } from 'node:fs';
+import { writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { adapters } from './adapters/index.js';
 import { commitTime, diffText, hasCommits, lsFiles, mergeBase, parseRange, readWorkingFile, repoRoot, show, untracked } from './git.js';
@@ -11,6 +11,7 @@ import { parseUnifiedDiff, syntheticAdded } from './resolve/diff.js';
 import { resolve } from './resolve/resolve.js';
 import type { RepoFiles } from './resolve/flags.js';
 import { findSessions } from './sessions.js';
+import { PRICES, isPriceTable, mergePrices, type PriceTable } from './pricing.js';
 import type { SessionRef, Window } from './types.js';
 
 export interface Io {
@@ -28,6 +29,8 @@ whyline doctor                   show what whyline can and cannot see here
 
 options
   --all            show unflagged hunks too
+  --brief          headers and flags only, no diff bodies (cheap for an agent to read)
+  --prices <file>  estimate dollars from a JSON price table; "default" uses the built-in list prices
   --json           print the full result as JSON
   --html <file>    write a self-contained HTML report
   --since <when>   only sessions after an ISO date or Nd (e.g. 7d)
@@ -60,6 +63,8 @@ function parseOptions(argv: string[]) {
     allowPositionals: true,
     options: {
       all: { type: 'boolean', default: false },
+      brief: { type: 'boolean', default: false },
+      prices: { type: 'string' },
       json: { type: 'boolean', default: false },
       html: { type: 'string' },
       since: { type: 'string' },
@@ -88,6 +93,13 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
     const since = parseSince(v.since, io.now());
     if (since === null) { io.stderr.write(`whyline: cannot parse --since ${v.since}\n`); return 1; }
     window.from = since;
+  }
+
+  let prices: PriceTable | undefined;
+  if (v.prices) {
+    const loaded = loadPrices(v.prices);
+    if (typeof loaded === 'string') { io.stderr.write(`whyline: cannot read prices ${v.prices}: ${loaded}\n`); return 1; }
+    prices = loaded;
   }
 
   const diffs = parseUnifiedDiff(diffText(root, range));
@@ -123,6 +135,7 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
     headText: (p) => (head ? show(root, head, p) : readWorkingFile(root, p)),
     repo,
     now: io.now(),
+    ...(prices ? { prices } : {}),
   });
 
   if (v.html) {
@@ -135,8 +148,21 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
   }
   if (v.json) { io.stdout.write(renderJson(result)); return 0; }
   if (v.html) { io.stdout.write(`${verdict(result)}\nwrote ${v.html}\n`); return 0; }
-  io.stdout.write(renderTerminal(result, { color: colorEnabled(v['no-color'], io.stdout, io.env), all: v.all }));
+  io.stdout.write(renderTerminal(result, { color: colorEnabled(v['no-color'], io.stdout, io.env), all: v.all, brief: v.brief }));
   return 0;
+}
+
+/** "default" is the built-in table; a file path is merged over it. Returns an error string on failure. */
+function loadPrices(spec: string): PriceTable | string {
+  if (spec === 'default') return PRICES;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(spec, 'utf8'));
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code ?? (e as Error).message;
+  }
+  if (!isPriceTable(parsed)) return 'expected {"<model>": {"input","output","cacheRead","cacheWrite"}} in USD per million tokens';
+  return mergePrices(PRICES, parsed);
 }
 
 async function sessions(root: string, io: Io): Promise<number> {

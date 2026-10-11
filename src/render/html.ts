@@ -1,6 +1,6 @@
 import type { AnnotatedDiff, Provenance } from '../types.js';
 import { FLAG_ORDER } from '../resolve/flags.js';
-import { MISMATCH_NOTE, fmtTokens, verdict } from './terminal.js';
+import { MISMATCH_NOTE, costLine, fmtTokens, fmtUsd, verdict } from './terminal.js';
 import { groupHunks, range, stamp, who, type Entry, type Group } from './groups.js';
 
 export function renderHtml(d: AnnotatedDiff): string {
@@ -27,6 +27,7 @@ export function renderHtml(d: AnnotatedDiff): string {
 <header>
   <h1>${esc(v)}</h1>
   <p class="meta">${esc(d.range)} · ${d.sessions.length} session(s) · ${fmtTokens(d.totals.cost)}</p>
+${costLine(d) ? `  <p class="meta">${esc(costLine(d)!)}</p>` : ''}
   <p>${counts}</p>
 </header>
 <main>
@@ -43,7 +44,7 @@ ${groups.map(section).join('\n')}
 function section(g: Group): string {
   const p = g.lead;
   const head = p
-    ? `<h2>turn ${p.turnNumber} · ${p.harness} · ${esc(who(p))} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)}</h2>
+    ? `<h2>turn ${p.turnNumber} · ${p.harness} · ${esc(who(p))} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)}${fmtUsd(p.turnCostUsd)}</h2>
 ${p.agentBrief ? `<p class="ask"><b>brief</b> ${esc(p.agentBrief)}</p>` : ''}
 <details open><summary>you asked</summary><pre>${esc(p.prompt.text)}</pre></details>
 ${p.reasoning ? `<details><summary>agent said</summary><pre>${esc(p.reasoning.text)}</pre></details>` : ''}`

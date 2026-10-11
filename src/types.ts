@@ -27,7 +27,7 @@ export type PromptEvent = EventBase & { kind: 'prompt'; text: string };
 export type ReasoningEvent = EventBase & { kind: 'reasoning'; text: string; visible: boolean };
 export type EditEvent = EventBase & { kind: 'edit'; tool: string; file: string; op: EditOp };
 export type ShellEvent = EventBase & { kind: 'shell'; command: string; touches: string[] };
-export type UsageEvent = EventBase & { kind: 'usage' } & Usage;
+export type UsageEvent = EventBase & { kind: 'usage'; model: string | null } & Usage;
 export type SpawnEvent = EventBase & { kind: 'spawn'; childAgentId: string; name: string; brief: string };
 export type InterruptEvent = EventBase & { kind: 'interrupt' };
 
@@ -114,6 +114,10 @@ export interface Provenance {
   editId: string;
   at: number;
   turnCost: Usage | null;
+  /** The model that did most of the turn's work, as the harness recorded it. */
+  turnModel: string | null;
+  /** Estimated USD for the turn; null without a price table or for an unpriced model. */
+  turnCostUsd: number | null;
 }
 
 export interface AnnotatedLine {
@@ -140,6 +144,7 @@ export interface AnnotatedFile {
   hunks: AnnotatedHunk[];
   turnIds: string[];
   cost: Usage | null;
+  costUsd: number | null;
   ledgerMismatch: boolean;
   driftedAt: number | null;
 }
@@ -155,6 +160,8 @@ export interface AnnotatedDiff {
     hunks: number;
     flagged: Record<Flag, number>;
     cost: Usage;
+    costUsd: number | null;
+    unpricedModels: string[];
   };
 }
 

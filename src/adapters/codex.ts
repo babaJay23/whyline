@@ -39,6 +39,7 @@ export const codex: Adapter = {
     const events: Event[] = [];
     const sessionId = ref.id;
     let turnId = 'turn-0';
+    let model: string | null = null;
     let n = 0;
 
     for (const r of rows) {
@@ -50,7 +51,7 @@ export const codex: Adapter = {
       const pt = str(p.type);
       const base = { sessionId, agentId: sessionId, turnId, at };
 
-      if (type === 'turn_context') { turnId = str(p.turn_id) ?? `turn-${++n}`; continue; }
+      if (type === 'turn_context') { turnId = str(p.turn_id) ?? `turn-${++n}`; model = str(p.model) ?? model; continue; }
 
       if (type === 'event_msg') {
         if (pt === 'user_message' && str(p.message)) {
@@ -62,7 +63,7 @@ export const codex: Adapter = {
           if (last) {
             const cached = num(last.cached_input_tokens);
             events.push({
-              kind: 'usage', id: `${turnId}:usage:${++n}`, ...base,
+              kind: 'usage', id: `${turnId}:usage:${++n}`, ...base, model,
               input: Math.max(0, num(last.input_tokens) - cached), output: num(last.output_tokens),
               cacheRead: cached, cacheWrite: num(last.cache_write_input_tokens),
             });

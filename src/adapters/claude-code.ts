@@ -114,7 +114,7 @@ function parseRows(rows: unknown[], sessionId: string, agentId: string | null): 
     if (usage && rid && !seenRequests.has(rid)) {
       seenRequests.add(rid);
       events.push({
-        kind: 'usage', id: `${rid}:usage`, sessionId, agentId: agent, turnId, at,
+        kind: 'usage', id: `${rid}:usage`, sessionId, agentId: agent, turnId, at, model: str(msg.model),
         input: num(usage.input_tokens), output: num(usage.output_tokens),
         cacheRead: num(usage.cache_read_input_tokens), cacheWrite: num(usage.cache_creation_input_tokens),
       });

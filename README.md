@@ -59,9 +59,25 @@ whyline --all                # every hunk
 whyline main..HEAD           # any git range
 whyline --html out.html      # self-contained report
 whyline --json               # everything, for scripts
+whyline --brief              # headers and flags only; cheap for an agent to read
+whyline --prices default     # add dollar estimates at list prices
 whyline sessions             # which sessions it found for this repo
 whyline doctor               # what it can and cannot see on this machine
 ```
+
+## Tokens and cost
+
+Every turn shows the tokens the model processed fresh and, separately, how many it read from cache. Cache reads are cheap per token but tell you how much context the turn was carrying.
+
+Dollar figures are off by default, because Claude Code and Codex subscriptions are not billed per token. If you pay per token, `--prices default` prices each turn at the vendors' list prices (table dated in `src/pricing.ts`), and `--prices rates.json` lets you supply your own in USD per million tokens:
+
+```json
+{ "claude-opus-5": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 } }
+```
+
+A model with no price is reported as unpriced, never costed at zero.
+
+whyline itself calls no model and spends no tokens. If an agent reads whyline's output, `--brief` gives it the verdict, each turn's ask, and the flagged hunks without the diff bodies.
 
 Sessions are matched to the repo by their working directory and to the diff by time. `--since 7d` and `--session <id>` override that.
 

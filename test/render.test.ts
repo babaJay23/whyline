@@ -8,7 +8,7 @@ const prov: Provenance = {
   harness: 'claude-code', sessionId: 's1', turnId: 'p3', turnNumber: 3, agentId: 's1', agentName: null, agentBrief: null,
   prompt: { text: "no, don't touch the readme.\nput the docs in docs/notes.md instead", at: Date.parse('2026-10-01T10:00:08Z') },
   reasoning: { text: 'Moving the notes.', at: 0 }, tool: 'Write', editId: 'toolu_4', at: Date.parse('2026-10-01T10:00:10Z'),
-  turnCost: { input: 30, output: 8, cacheRead: 1200, cacheWrite: 0 }, turnModel: 'claude-opus-5', turnCostUsd: 0.00095,
+  turnCost: { input: 30, output: 8, cacheRead: 1200, cacheWrite: 0 }, turnModel: 'claude-opus-5', turnCostUsd: 0.001,
 };
 const flagged: AnnotatedHunk = {
   oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, removed: [], lines: [{ text: '# notes', provenance: prov }],
@@ -26,10 +26,10 @@ const diff: AnnotatedDiff = {
   schemaVersion: 1, range: 'HEAD..working tree', generatedAt: 0,
   sessions: [{ harness: 'claude-code', id: 's1', path: '/x', cwd: '/repo', startedAt: 0, endedAt: 1 }],
   files: [
-    { path: 'docs/notes.md', status: 'added', hunks: [flagged], turnIds: ['p3'], cost: prov.turnCost, costUsd: 0.00095, ledgerMismatch: false, driftedAt: null },
+    { path: 'docs/notes.md', status: 'added', hunks: [flagged], turnIds: ['p3'], cost: prov.turnCost, costUsd: 0.001, ledgerMismatch: false, driftedAt: null },
     { path: 'src/a.ts', status: 'modified', hunks: [plain, untraced], turnIds: ['p1'], cost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 }, costUsd: 0.001, ledgerMismatch: true, driftedAt: null },
   ],
-  totals: { files: 2, hunks: 3, flagged: { untraced: 1, unrequested: 1, 'after-correction': 1, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 130, output: 28, cacheRead: 1200, cacheWrite: 0 }, costUsd: 0.00195, unpricedModels: [] },
+  totals: { files: 2, hunks: 3, flagged: { untraced: 1, unrequested: 1, 'after-correction': 1, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 130, output: 28, cacheRead: 1200, cacheWrite: 0 }, costUsd: 0.002, unpricedModels: [] },
 };
 
 describe('fmtTokens', () => {
@@ -81,9 +81,17 @@ describe('renderTerminal', () => {
     ].join('\n'));
   });
 
+  it('shows no dollar figures when no price table was given', () => {
+    const strip = (h: AnnotatedHunk): AnnotatedHunk => ({ ...h, lead: h.lead ? { ...h.lead, turnCostUsd: null } : null, lines: h.lines.map((l) => ({ ...l, provenance: l.provenance ? { ...l.provenance, turnCostUsd: null } : null })) });
+    const d = { ...diff, files: diff.files.map((f) => ({ ...f, costUsd: null, hunks: f.hunks.map(strip) })), totals: { ...diff.totals, costUsd: null, unpricedModels: [] } };
+    const out = renderTerminal(d, { color: false, all: true });
+    expect(out).not.toContain('$');
+    expect(out).not.toContain('estimated cost');
+  });
+
   it('names unpriced models instead of hiding them', () => {
     const d = { ...diff, totals: { ...diff.totals, costUsd: 0, unpricedModels: ['codex-auto-review'] } };
-    expect(renderTerminal(d, { color: false, all: false })).toContain('\nestimated cost $0.0000 · no price for codex-auto-review · --prices to override\n');
+    expect(renderTerminal(d, { color: false, all: false })).toContain('\nestimated cost $0.0000 (claude-opus-5) · no price for codex-auto-review · --prices to override\n');
   });
 
   it('brief mode prints headers and flags only, no diff bodies or reasoning', () => {

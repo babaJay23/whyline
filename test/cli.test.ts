@@ -173,11 +173,17 @@ describe('whyline (e2e)', () => {
     r.write('f.txt', 'b\n');
     const prices = join(home, 'prices.json');
     writeFileSync(prices, JSON.stringify({ 'test-model': { input: 1_000_000, output: 1_000_000, cacheRead: 0, cacheWrite: 0 } }));
+    const plain = io(r.dir, home);
+    expect(await run(['--all'], plain)).toBe(0);
+    expect(plain.out).not.toContain('$'); // subscriptions are not billed per token; dollars are opt-in
     const o = io(r.dir, home);
     expect(await run(['--all', '--brief', '--prices', prices], o)).toBe(0);
-    expect(o.out).toContain('estimated cost $72.0000 (test-model)'); // 72 tokens at $1 each
+    expect(o.out).toContain('estimated cost $66.0000 (test-model)'); // 66 tokens at $1 each
     expect(o.out).toContain('  f.txt @@ -1 +1 @@\n');
     expect(o.out).not.toContain('+b');
+    const builtIn = io(r.dir, home);
+    expect(await run(['--prices', 'default'], builtIn)).toBe(0);
+    expect(builtIn.out).toContain('no price for test-model');
     const bad = io(r.dir, home);
     expect(await run(['--prices', join(home, 'nope.json')], bad)).toBe(1);
     expect(bad.err).toMatch(/^whyline: cannot read prices /);

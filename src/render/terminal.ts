@@ -34,35 +34,68 @@ export function verdict(d: AnnotatedDiff): string {
   return `${head}, ${flaggedHunks} ${flaggedHunks === 1 ? 'needs' : 'need'} a look: ${parts.join(', ')}`;
 }
 
-export function renderTerminal(d: AnnotatedDiff, opts: { color: boolean; all: boolean }): string {
+export function fmtUsd(usd: number | null): string {
+  return usd === null ? '' : ` · ~$${usd.toFixed(4)}`;
+}
+
+/** One line under the verdict, only when a price table was supplied. */
+export function costLine(d: AnnotatedDiff): string | null {
+  if (d.totals.costUsd === null) return null;
+  const models = [...new Set(d.files.flatMap((f) => f.hunks.map((h) => h.lead?.turnModel)).filter((m): m is string => !!m))];
+  const priced = models.filter((m) => !d.totals.unpricedModels.includes(m));
+  const parts = [`estimated cost $${d.totals.costUsd.toFixed(4)}${priced.length ? ` (${priced.join(', ')})` : ''}`];
+  if (d.totals.unpricedModels.length) parts.push(`no price for ${d.totals.unpricedModels.join(', ')}`);
+  else parts.push('built-in prices,');
+  parts.push('--prices to override');
+  return parts.join(' · ').replace('built-in prices, · ', 'built-in prices, ');
+}
+
+export interface TerminalOptions {
+  color: boolean;
+  all: boolean;
+  /** Headers and flags only: what an agent needs to decide where to look, at a fraction of the tokens. */
+  brief?: boolean;
+}
+
+export function renderTerminal(d: AnnotatedDiff, opts: TerminalOptions): string {
   const c = paint(opts.color);
-  const out: string[] = [c.bold(verdict(d)), ''];
+  const out: string[] = [c.bold(verdict(d))];
+  const cost = costLine(d);
+  if (cost) out.push(c.dim(cost));
+  out.push('');
   const { groups, unflagged } = groupHunks(d, { all: opts.all });
 
-  for (const g of groups) out.push(...groupBlock(g, c), '');
+  for (const g of groups) out.push(...groupBlock(g, c, opts.brief === true), '');
 
   if (!opts.all && unflagged.length) {
     out.push(c.dim('unflagged:'));
     for (const f of d.files) {
       const n = unflagged.filter((e) => e.f === f).length;
       if (n === 0) continue;
-      out.push(c.dim(`  ${f.path}  ${n} ${plural(n, 'hunk')}  ${f.turnIds.length} ${plural(f.turnIds.length, 'turn')}  ${fmtTokens(f.cost)}`));
+      out.push(c.dim(`  ${f.path}  ${n} ${plural(n, 'hunk')}  ${f.turnIds.length} ${plural(f.turnIds.length, 'turn')}  ${fmtTokens(f.cost)}${fmtUsd(f.costUsd)}`));
     }
     out.push('');
   }
   return out.join('\n');
 }
 
-function groupBlock(g: Group, c: ReturnType<typeof paint>): string[] {
+function groupBlock(g: Group, c: ReturnType<typeof paint>, brief: boolean): string[] {
   const lines: string[] = [];
   const p = g.lead;
   if (p) {
-    lines.push(c.bold(`turn ${p.turnNumber} · ${p.harness} · ${who(p)} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)}`));
+    lines.push(c.bold(`turn ${p.turnNumber} · ${p.harness} · ${who(p)} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)}${fmtUsd(p.turnCostUsd)}`));
     if (p.agentBrief) lines.push(`  brief: ${oneLine(p.agentBrief, 120)}`);
     lines.push(`  you asked: ${oneLine(p.prompt.text, 120)}`);
-    if (p.reasoning) lines.push(c.dim(`  agent said: ${oneLine(p.reasoning.text, 160)}`));
+    if (p.reasoning && !brief) lines.push(c.dim(`  agent said: ${oneLine(p.reasoning.text, 160)}`));
   } else {
     lines.push(c.bold('no turn found'));
+  }
+  if (brief) {
+    for (const { f, h } of g.entries) {
+      const flags = h.flags.map((x) => x.flag).join(', ');
+      lines.push(`  ${c.bold(f.path)} ${c.cyan(range(h))}${flags ? `  ${c.yellow(flags)}` : ''}`);
+    }
+    return lines;
   }
   let said = p?.reasoning?.text ?? null;
   for (const e of g.entries) {

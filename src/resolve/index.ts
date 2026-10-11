@@ -12,6 +12,7 @@ export interface Turn {
   prevInterrupted: boolean;
   firstAt: number;
   number: number; // 1-based within the session, by time
+  model: string | null; // the model behind most of the turn's tokens
 }
 
 export interface EventIndex {
@@ -45,6 +46,7 @@ export function indexEvents(sessions: Session[], repoRoot: string): EventIndex {
   const shells: ShellEvent[] = [];
   const agents = new Map<string, { name: string; brief: string }>();
   const harnessOf = new Map<string, Harness>();
+  const modelTokens = new Map<string, Map<string, number>>(); // turn key -> model -> tokens
 
   for (const { ref, events } of sessions) {
     harnessOf.set(ref.id, ref.harness);
@@ -52,7 +54,7 @@ export function indexEvents(sessions: Session[], repoRoot: string): EventIndex {
       const key = turnKey(ref.id, id);
       let t = turns.get(key);
       if (!t) {
-        t = { id, sessionId: ref.id, harness: ref.harness, prompt: null, reasoning: [], usage: null, interrupted: false, prevInterrupted: false, firstAt: at, number: 0 };
+        t = { id, sessionId: ref.id, harness: ref.harness, prompt: null, reasoning: [], usage: null, interrupted: false, prevInterrupted: false, firstAt: at, number: 0, model: null };
         turns.set(key, t);
       }
       if (at < t.firstAt) t.firstAt = at;
@@ -63,7 +65,16 @@ export function indexEvents(sessions: Session[], repoRoot: string): EventIndex {
       switch (e.kind) {
         case 'prompt': t.prompt ??= e; break;
         case 'reasoning': t.reasoning.push(e); break;
-        case 'usage': t.usage = addUsage(t.usage ?? ZERO_USAGE, e); break;
+        case 'usage': {
+          t.usage = addUsage(t.usage ?? ZERO_USAGE, e);
+          if (e.model) {
+            const key = turnKey(ref.id, e.turnId);
+            const m = modelTokens.get(key) ?? new Map<string, number>();
+            m.set(e.model, (m.get(e.model) ?? 0) + e.input + e.output + e.cacheRead + e.cacheWrite);
+            modelTokens.set(key, m);
+          }
+          break;
+        }
         case 'interrupt': t.interrupted = true; break;
         case 'spawn': agents.set(e.childAgentId, { name: e.name, brief: e.brief }); break;
         case 'shell': shells.push(e); break;
@@ -78,6 +89,10 @@ export function indexEvents(sessions: Session[], repoRoot: string): EventIndex {
     }
   }
   for (const list of editsByFile.values()) list.sort((a, b) => a.at - b.at);
+  for (const [key, m] of modelTokens) {
+    const t = turns.get(key);
+    if (t) t.model = [...m.entries()].sort((a, b) => b[1] - a[1])[0]![0];
+  }
 
   // prevInterrupted: walk each session's turns in time order.
   const bySession = new Map<string, Turn[]>();

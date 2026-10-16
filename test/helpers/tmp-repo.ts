@@ -26,5 +26,9 @@ export function makeRepo(files: Record<string, string> = {}) {
     git('commit', '-q', '--allow-empty', '-m', msg);
     return git('rev-parse', 'HEAD');
   };
-  return { dir, write, commit, git };
+  const merge = (branch: string) => {
+    git('merge', '-q', '--no-ff', '-m', `merge ${branch}`, branch);
+    return git('rev-parse', 'HEAD');
+  };
+  return { dir, write, commit, git, merge };
 }

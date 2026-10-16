@@ -2,7 +2,8 @@ import { parseArgs } from 'node:util';
 import { writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { adapters } from './adapters/index.js';
-import { commitTime, diffText, hasCommits, lsFiles, mergeBase, parseRange, readWorkingFile, repoRoot, show, untracked } from './git.js';
+import { commitTime, diffText, gitDir, hasCommits, lsFiles, mergeBase, parseRange, pushNotes, readWorkingFile, repoRoot, revList, show, untracked } from './git.js';
+import { attachCommits } from './attach.js';
 import { renderHtml } from './render/html.js';
 import { renderJson } from './render/json.js';
 import { renderTerminal, verdict } from './render/terminal.js';
@@ -26,6 +27,10 @@ export interface Io {
 const USAGE = `whyline [range] [options]        annotate the diff (default: working tree vs HEAD)
 whyline sessions                 list agent sessions found for this repo
 whyline doctor                   show what whyline can and cannot see here
+whyline attach [range]           write an intent record for each commit into git notes (default: HEAD)
+  --no-prompts     leave prompt and reasoning text out of the record
+  --push           push refs/notes/whyline to --remote (default origin) afterwards
+  --quiet          print only failures (for hooks)
 
 options
   --all            show unflagged hunks too
@@ -54,6 +59,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   const cmd = args.positionals[0];
   if (cmd === 'sessions') return sessions(root, io);
   if (cmd === 'doctor') return doctor(root, io);
+  if (cmd === 'attach') return attach(root, args.positionals[1] ?? 'HEAD', args.values, io);
   return review(root, cmd ?? null, args.values, io);
 }
 
@@ -70,6 +76,10 @@ function parseOptions(argv: string[]) {
       since: { type: 'string' },
       session: { type: 'string', multiple: true },
       'no-color': { type: 'boolean', default: false },
+      'no-prompts': { type: 'boolean', default: false },
+      push: { type: 'boolean', default: false },
+      remote: { type: 'string', default: 'origin' },
+      quiet: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -163,6 +173,47 @@ function loadPrices(spec: string): PriceTable | string {
   }
   if (!isPriceTable(parsed)) return 'expected {"<model>": {"input","output","cacheRead","cacheWrite"}} in USD per million tokens';
   return mergePrices(PRICES, parsed);
+}
+
+async function attach(root: string, range: string, v: Values, io: Io): Promise<number> {
+  const shas = revList(root, range);
+  if (shas.length === 0) { io.stderr.write(`whyline: unknown revision "${range}"\n`); return 1; }
+  let prices: PriceTable | undefined;
+  if (v.prices) {
+    const loaded = loadPrices(v.prices);
+    if (typeof loaded === 'string') { io.stderr.write(`whyline: cannot read prices ${v.prices}: ${loaded}\n`); return 1; }
+    prices = loaded;
+  }
+  const results = await attachCommits(root, shas, { prompts: !v['no-prompts'], now: io.now(), home: io.home, ...(prices ? { prices } : {}) });
+  let attached = 0;
+  const failures: string[] = [];
+  for (const res of results) {
+    const short = res.sha.slice(0, 7);
+    if (res.status === 'attached') {
+      attached++;
+      const hunks = res.record.record.totals.hunks;
+      const flagged = res.record.record.files.flatMap((f) => f.hunks).filter((h) => h.flags.length).length;
+      if (!v.quiet) io.stdout.write(`${short}  attached (${hunks} ${hunks === 1 ? 'hunk' : 'hunks'}, ${flagged} flagged)\n`);
+    } else {
+      const why = res.status === 'skipped-merge' ? 'skipped (merge commit)' : res.status === 'no-sessions' ? 'no sessions' : 'write failed';
+      failures.push(`${short}  ${why}`);
+      (v.quiet ? io.stderr : io.stdout).write(`${short}  ${why}\n`);
+    }
+  }
+  if (attached === 0) {
+    if (v.quiet) writeLastError(root, failures.join('; ') || 'nothing to attach');
+    return 3;
+  }
+  if (v.push) {
+    const err = pushNotes(root, v.remote);
+    if (err) { io.stderr.write(`whyline: push failed: ${err}\n`); return 1; }
+    if (!v.quiet) io.stdout.write(`pushed refs/notes/whyline to ${v.remote}\n`);
+  }
+  return 0;
+}
+
+function writeLastError(root: string, text: string): void {
+  try { writeFileSync(join(gitDir(root), 'whyline-last-error'), `${new Date().toISOString()} ${text}\n`); } catch { /* best effort; doctor reports what it can */ }
 }
 
 async function sessions(root: string, io: Io): Promise<number> {

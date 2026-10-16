@@ -190,6 +190,26 @@ describe('whyline (e2e)', () => {
     expect(bad.err).toMatch(/^whyline: cannot read prices /);
   });
 
+  it('attach writes a note for HEAD and reports a range', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    r.write('f.txt', 'b\n');
+    await settle();
+    const head = r.commit('agent change');
+    const o = io(r.dir, home);
+    expect(await run(['attach'], o)).toBe(0);
+    expect(o.out).toBe(`${head.slice(0, 7)}  attached (1 hunk, 0 flagged)\n`);
+    expect(r.git('notes', '--ref', 'whyline', 'list')).toContain(head);
+    const none = io(r.dir, mkdtempSync(join(tmpdir(), 'whyline-empty-')));
+    expect(await run(['attach', '--quiet'], none)).toBe(3);
+    expect(none.out).toBe('');
+    expect(none.err).toContain('no sessions');
+    expect(readFileSync(join(r.dir, '.git', 'whyline-last-error'), 'utf8')).toContain('no sessions');
+  });
+
   it('lists sessions and runs doctor', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     r.commit('base');

@@ -113,6 +113,15 @@ describe('renderTerminal', () => {
     ].join('\n'));
   });
 
+  it('labels hunks with their commit and shows unrecorded prompts honestly', () => {
+    const blankLead = { ...prov, prompt: { ...prov.prompt, text: '' }, reasoning: { text: '', at: 0 } };
+    const d = { ...diff, files: [{ ...diff.files[0]!, commit: 'abc1234', hunks: [{ ...flagged, lead: blankLead }] }] };
+    const out = renderTerminal(d, { color: false, all: false });
+    expect(out).toContain('  docs/notes.md (abc1234) @@ -0,0 +1 @@');
+    expect(out).toContain('  you asked: (not recorded)\n');
+    expect(out).not.toContain('agent said:');
+  });
+
   it('prints a hunk-level "agent said" only when it changes', () => {
     const r = (t: string) => ({ ...prov, reasoning: { text: t, at: 0 } });
     const a: AnnotatedHunk = { ...flagged, lead: r('Step one.') };

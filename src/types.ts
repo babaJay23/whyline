@@ -145,6 +145,8 @@ export interface AnnotatedFile {
   turnIds: string[];
   cost: Usage | null;
   costUsd: number | null;
+  /** Short sha when this file came from an attached record rather than a live diff. */
+  commit?: string;
   ledgerMismatch: boolean;
   driftedAt: number | null;
 }

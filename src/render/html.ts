@@ -3,7 +3,7 @@ import { FLAG_ORDER } from '../resolve/flags.js';
 import { MISMATCH_NOTE, costLine, fmtTokens, fmtUsd, verdict } from './terminal.js';
 import { groupHunks, range, stamp, who, type Entry, type Group } from './groups.js';
 
-export function renderHtml(d: AnnotatedDiff): string {
+export function renderHtml(d: AnnotatedDiff, opts: { banner?: string } = {}): string {
   const v = verdict(d);
   const { groups } = groupHunks(d, { all: true });
 
@@ -28,6 +28,7 @@ export function renderHtml(d: AnnotatedDiff): string {
   <h1>${esc(v)}</h1>
   <p class="meta">${esc(d.range)} · ${d.sessions.length} session(s) · ${fmtTokens(d.totals.cost)}</p>
 ${costLine(d) ? `  <p class="meta">${esc(costLine(d)!)}</p>` : ''}
+${opts.banner ? `  <p class="meta">${esc(opts.banner)}</p>` : ''}
   <p>${counts}</p>
 </header>
 <main>
@@ -46,8 +47,8 @@ function section(g: Group): string {
   const head = p
     ? `<h2>turn ${p.turnNumber} · ${p.harness} · ${esc(who(p))} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)}${fmtUsd(p.turnCostUsd)}</h2>
 ${p.agentBrief ? `<p class="ask"><b>brief</b> ${esc(p.agentBrief)}</p>` : ''}
-<details open><summary>you asked</summary><pre>${esc(p.prompt.text)}</pre></details>
-${p.reasoning ? `<details><summary>agent said</summary><pre>${esc(p.reasoning.text)}</pre></details>` : ''}`
+<details open><summary>you asked</summary><pre>${p.prompt.text === '' ? '(not recorded)' : esc(p.prompt.text)}</pre></details>
+${p.reasoning && p.reasoning.text !== '' ? `<details><summary>agent said</summary><pre>${esc(p.reasoning.text)}</pre></details>` : ''}`
     : '<h2>no turn found</h2>';
   return `<section class="turn">
 ${head}
@@ -58,7 +59,7 @@ ${hunks(g, p).join('\n')}
 function hunks(g: Group, p: Provenance | null): string[] {
   let said = p?.reasoning?.text ?? null;
   return g.entries.map((e) => {
-    const own = e.h.lead?.reasoning?.text ?? null;
+    const own = e.h.lead?.reasoning?.text || null;
     const show = own !== null && own !== said ? own : null;
     if (own !== null) said = own;
     return hunk(e, show);
@@ -70,7 +71,7 @@ function hunk({ f, h, id }: Entry, said: string | null): string {
   const own = said !== null ? `<details><summary>agent said</summary><pre>${esc(said)}</pre></details>` : '';
   const code = [...h.removed.map((r) => `<span class="del">-${esc(r)}</span>`), ...h.lines.map((l) => `<span class="add">+${esc(l.text)}</span>`)].join('\n');
   const body = `<article class="hunk" id="${id}">
-<h3>${esc(f.path)} <code>${range(h)}</code></h3>
+<h3>${esc(f.commit ? `${f.path} (${f.commit})` : f.path)} <code>${range(h)}</code></h3>
 ${chips ? `<p class="flags">${chips}</p>` : ''}
 ${f.ledgerMismatch ? `<p class="prov">${MISMATCH_NOTE}</p>` : ''}
 ${own}

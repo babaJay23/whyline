@@ -2,7 +2,8 @@ import { parseArgs } from 'node:util';
 import { writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { adapters } from './adapters/index.js';
-import { commitTime, diffText, gitDir, hasCommits, lsFiles, mergeBase, parseRange, pushNotes, readWorkingFile, repoRoot, revList, show, untracked } from './git.js';
+import { commitTime, diffText, gitDir, hasCommits, lsFiles, mergeBase, parents, parseRange, pushNotes, readWorkingFile, repoRoot, revList, show, untracked } from './git.js';
+import { mergeRecords, readRecords } from './merge.js';
 import { attachCommits } from './attach.js';
 import { renderHtml } from './render/html.js';
 import { renderJson } from './render/json.js';
@@ -13,7 +14,7 @@ import { resolve } from './resolve/resolve.js';
 import type { RepoFiles } from './resolve/flags.js';
 import { findSessions } from './sessions.js';
 import { PRICES, isPriceTable, mergePrices, type PriceTable } from './pricing.js';
-import type { SessionRef, Window } from './types.js';
+import type { AnnotatedDiff, SessionRef, Window } from './types.js';
 
 export interface Io {
   cwd: string;
@@ -41,6 +42,8 @@ options
   --since <when>   only sessions after an ISO date or Nd (e.g. 7d)
   --session <id>   use only this session (repeatable, prefix ok)
   --no-color       disable colors (NO_COLOR is also honored)
+  --from-notes     read attached records instead of local transcripts
+  --no-notes       never fall back to attached records
 `;
 
 export async function run(argv: string[], io: Io): Promise<number> {
@@ -77,6 +80,8 @@ function parseOptions(argv: string[]) {
       session: { type: 'string', multiple: true },
       'no-color': { type: 'boolean', default: false },
       'no-prompts': { type: 'boolean', default: false },
+      'from-notes': { type: 'boolean', default: false },
+      'no-notes': { type: 'boolean', default: false },
       push: { type: 'boolean', default: false },
       remote: { type: 'string', default: 'origin' },
       quiet: { type: 'boolean', default: false },
@@ -87,7 +92,15 @@ function parseOptions(argv: string[]) {
 
 type Values = ReturnType<typeof parseOptions>['values'];
 
-async function review(root: string, range: string | null, v: Values, io: Io): Promise<number> {
+interface Gathered {
+  result: AnnotatedDiff;
+  banner: string | null;
+  /** The commits a range names, or null for a working-tree review. */
+  shas: string[] | null;
+}
+
+/** Everything a review needs, from local transcripts or, failing that, from attached records. Returns an exit code on failure. */
+async function gather(root: string, range: string | null, v: Values, io: Io): Promise<Gathered | number> {
   if (!hasCommits(root)) { io.stderr.write('whyline: this repository has no commits yet\n'); return 1; }
   const { base, head } = parseRange(range);
   let window: Window;
@@ -104,7 +117,6 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
     if (since === null) { io.stderr.write(`whyline: cannot parse --since ${v.since}\n`); return 1; }
     window.from = since;
   }
-
   let prices: PriceTable | undefined;
   if (v.prices) {
     const loaded = loadPrices(v.prices);
@@ -114,18 +126,32 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
 
   const diffs = parseUnifiedDiff(diffText(root, range));
   const untrackedFiles = head ? [] : untracked(root);
-  if (!head) {
-    for (const p of untrackedFiles) {
-      const content = readWorkingFile(root, p);
-      if (content !== null && !looksBinary(content)) diffs.push(syntheticAdded(p, content));
-    }
+  for (const p of untrackedFiles) {
+    const content = readWorkingFile(root, p);
+    if (content !== null && !looksBinary(content)) diffs.push(syntheticAdded(p, content));
   }
   if (diffs.length === 0) { io.stdout.write('no changes\n'); return 2; }
 
+  const shas = head ? revList(root, `${base}..${head}`).filter((s) => parents(root, s).length <= 1) : null;
   const ids = v.session && v.session.length ? v.session : undefined;
-  const { selected, all } = await findSessions(root, io.home, ids ? { window, ids } : { window });
-  if (selected.length === 0) {
-    io.stderr.write(noSessions(all, io.home, window));
+  const live = await findSessions(root, io.home, ids ? { window, ids } : { window });
+
+  // An explicit --session that matches nothing is a question about sessions, not a request for records.
+  if (shas && !v['no-notes'] && (v['from-notes'] || (live.selected.length === 0 && !ids))) {
+    const { records, missing, invalid } = readRecords(root, shas);
+    for (const s of missing) io.stderr.write(`whyline: missing record for ${s.slice(0, 7)}\n`);
+    for (const s of invalid) io.stderr.write(`whyline: unreadable record for ${s.slice(0, 7)}\n`);
+    if (records.length && !missing.length && !invalid.length) {
+      const n = records.length;
+      return { result: mergeRecords(records, range ?? '', io.now()), banner: `from attached records (${n} ${n === 1 ? 'commit' : 'commits'})`, shas };
+    }
+    if (live.selected.length === 0) {
+      io.stderr.write('run `whyline attach <range>` on the machine that has the transcripts\n');
+      return 3;
+    }
+  }
+  if (live.selected.length === 0) {
+    io.stderr.write(noSessions(live.all, io.home, window));
     return 3;
   }
 
@@ -140,17 +166,25 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
     range: range ?? 'HEAD..working tree',
     window,
     diffs,
-    sessions: selected,
+    sessions: live.selected,
     baseText: (p) => show(root, base, p),
     headText: (p) => (head ? show(root, head, p) : readWorkingFile(root, p)),
     repo,
     now: io.now(),
     ...(prices ? { prices } : {}),
   });
+  return { result, banner: null, shas };
+}
+
+async function review(root: string, range: string | null, v: Values, io: Io): Promise<number> {
+  const g = await gather(root, range, v, io);
+  if (typeof g === 'number') return g;
+  const { result, banner } = g;
+  const extra = banner ? { banner } : {};
 
   if (v.html) {
     try {
-      writeFileSync(v.html, renderHtml(result));
+      writeFileSync(v.html, renderHtml(result, extra));
     } catch (e) {
       io.stderr.write(`whyline: cannot write ${v.html}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}\n`);
       return 1;
@@ -158,21 +192,8 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
   }
   if (v.json) { io.stdout.write(renderJson(result)); return 0; }
   if (v.html) { io.stdout.write(`${verdict(result)}\nwrote ${v.html}\n`); return 0; }
-  io.stdout.write(renderTerminal(result, { color: colorEnabled(v['no-color'], io.stdout, io.env), all: v.all, brief: v.brief }));
+  io.stdout.write(renderTerminal(result, { color: colorEnabled(v['no-color'], io.stdout, io.env), all: v.all, brief: v.brief, ...extra }));
   return 0;
-}
-
-/** "default" is the built-in table; a file path is merged over it. Returns an error string on failure. */
-function loadPrices(spec: string): PriceTable | string {
-  if (spec === 'default') return PRICES;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(spec, 'utf8'));
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code ?? (e as Error).message;
-  }
-  if (!isPriceTable(parsed)) return 'expected {"<model>": {"input","output","cacheRead","cacheWrite"}} in USD per million tokens';
-  return mergePrices(PRICES, parsed);
 }
 
 async function attach(root: string, range: string, v: Values, io: Io): Promise<number> {
@@ -210,6 +231,19 @@ async function attach(root: string, range: string, v: Values, io: Io): Promise<n
     if (!v.quiet) io.stdout.write(`pushed refs/notes/whyline to ${v.remote}\n`);
   }
   return 0;
+}
+
+/** "default" is the built-in table; a file path is merged over it. Returns an error string on failure. */
+function loadPrices(spec: string): PriceTable | string {
+  if (spec === 'default') return PRICES;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(spec, 'utf8'));
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code ?? (e as Error).message;
+  }
+  if (!isPriceTable(parsed)) return 'expected {"<model>": {"input","output","cacheRead","cacheWrite"}} in USD per million tokens';
+  return mergePrices(PRICES, parsed);
 }
 
 function writeLastError(root: string, text: string): void {

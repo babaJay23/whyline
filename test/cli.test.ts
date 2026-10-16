@@ -210,6 +210,40 @@ describe('whyline (e2e)', () => {
     expect(readFileSync(join(r.dir, '.git', 'whyline-last-error'), 'utf8')).toContain('no sessions');
   });
 
+  it('renders from attached records when transcripts are gone, and refuses a partial set', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    const base = r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    r.write('f.txt', 'b\n');
+    await settle();
+    const c1 = r.commit('agent change');
+    expect(await run(['attach', '--no-prompts'], io(r.dir, home))).toBe(0);
+    r.write('f.txt', 'c\n');
+    await settle();
+    const c2 = r.commit('by hand');
+
+    const gone = mkdtempSync(join(tmpdir(), 'whyline-gone-')); // a machine with no transcripts
+    const one = io(r.dir, gone);
+    expect(await run([`${base}..${c1}`, '--all'], one)).toBe(0);
+    expect(one.out).toContain('from attached records (1 commit)');
+    expect(one.out).toContain(`  f.txt (${c1.slice(0, 7)}) @@ -1 +1 @@`);
+    expect(one.out).toContain('you asked: (not recorded)');
+
+    const partial = io(r.dir, gone);
+    expect(await run([`${base}..${c2}`], partial)).toBe(3);
+    expect(partial.err).toContain(`missing record for ${c2.slice(0, 7)}`);
+
+    const forbidden = io(r.dir, gone);
+    expect(await run([`${base}..${c1}`, '--no-notes'], forbidden)).toBe(3);
+    expect(forbidden.err).toContain('no agent sessions');
+
+    const forced = io(r.dir, home); // transcripts exist, but ask for notes anyway
+    expect(await run([`${base}..${c1}`, '--from-notes', '--all'], forced)).toBe(0);
+    expect(forced.out).toContain('from attached records');
+  });
+
   it('lists sessions and runs doctor', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     r.commit('base');

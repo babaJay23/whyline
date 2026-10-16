@@ -1,4 +1,4 @@
-import type { AnnotatedDiff, Usage } from '../types.js';
+import type { AnnotatedDiff, AnnotatedFile, Usage } from '../types.js';
 import { FLAG_ORDER } from '../resolve/flags.js';
 import { paint } from './ansi.js';
 import { groupHunks, oneLine, plural, range, stamp, who, type Entry, type Group } from './groups.js';
@@ -55,6 +55,8 @@ export interface TerminalOptions {
   all: boolean;
   /** Headers and flags only: what an agent needs to decide where to look, at a fraction of the tokens. */
   brief?: boolean;
+  /** Where the data came from when it was not a live diff, e.g. attached records. */
+  banner?: string;
 }
 
 export function renderTerminal(d: AnnotatedDiff, opts: TerminalOptions): string {
@@ -62,6 +64,7 @@ export function renderTerminal(d: AnnotatedDiff, opts: TerminalOptions): string 
   const out: string[] = [c.bold(verdict(d))];
   const cost = costLine(d);
   if (cost) out.push(c.dim(cost));
+  if (opts.banner) out.push(c.dim(opts.banner));
   out.push('');
   const { groups, unflagged } = groupHunks(d, { all: opts.all });
 
@@ -85,29 +88,33 @@ function groupBlock(g: Group, c: ReturnType<typeof paint>, brief: boolean): stri
   if (p) {
     lines.push(c.bold(`turn ${p.turnNumber} · ${p.harness} · ${who(p)} · ${stamp(p.at)} · ${fmtTokens(p.turnCost)}${fmtUsd(p.turnCostUsd)}`));
     if (p.agentBrief) lines.push(`  brief: ${oneLine(p.agentBrief, 120)}`);
-    lines.push(`  you asked: ${oneLine(p.prompt.text, 120)}`);
-    if (p.reasoning && !brief) lines.push(c.dim(`  agent said: ${oneLine(p.reasoning.text, 160)}`));
+    lines.push(`  you asked: ${p.prompt.text === '' ? '(not recorded)' : oneLine(p.prompt.text, 120)}`);
+    if (p.reasoning && p.reasoning.text !== '' && !brief) lines.push(c.dim(`  agent said: ${oneLine(p.reasoning.text, 160)}`));
   } else {
     lines.push(c.bold('no turn found'));
   }
   if (brief) {
     for (const { f, h } of g.entries) {
       const flags = h.flags.map((x) => x.flag).join(', ');
-      lines.push(`  ${c.bold(f.path)} ${c.cyan(range(h))}${flags ? `  ${c.yellow(flags)}` : ''}`);
+      lines.push(`  ${c.bold(label(f))} ${c.cyan(range(h))}${flags ? `  ${c.yellow(flags)}` : ''}`);
     }
     return lines;
   }
   let said = p?.reasoning?.text ?? null;
   for (const e of g.entries) {
-    const own = e.h.lead?.reasoning?.text ?? null;
+    const own = e.h.lead?.reasoning?.text || null;
     lines.push(...hunkBlock(e, own !== null && own !== said ? own : null, c));
     if (own !== null) said = own;
   }
   return lines;
 }
 
+function label(f: AnnotatedFile): string {
+  return f.commit ? `${f.path} (${f.commit})` : f.path;
+}
+
 function hunkBlock({ f, h }: Entry, said: string | null, c: ReturnType<typeof paint>): string[] {
-  const lines: string[] = [`  ${c.bold(f.path)} ${c.cyan(range(h))}`];
+  const lines: string[] = [`  ${c.bold(label(f))} ${c.cyan(range(h))}`];
   for (const fl of h.flags) lines.push(`    ${c.red('!')} ${c.yellow(fl.flag)}  ${fl.detail}`);
   if (f.ledgerMismatch) lines.push(c.dim(`    ${MISMATCH_NOTE}`));
   // Only say what the agent said when it changed since the last hunk shown.

@@ -12,7 +12,7 @@ export function readRecords(root: string, shas: string[]): { records: IntentReco
     const text = noteShow(root, sha);
     if (text === null) { missing.push(sha); continue; }
     const rec = parseRecord(text);
-    if (!rec) { invalid.push(sha); continue; }
+    if (!rec || rec.commit !== sha) { invalid.push(sha); continue; }
     records.push(rec);
   }
   return { records, missing, invalid };

@@ -46,7 +46,8 @@ export async function attachCommits(root: string, shas: string[], opts: AttachOp
 /** Resolve one commit against its first parent from local transcripts; null when no session overlaps. */
 export async function recordFor(root: string, sha: string, opts: AttachOptions): Promise<IntentRecord | null> {
   const [parent] = parents(root, sha);
-  const window = { from: parent ? commitTime(root, parent) : 0, to: commitTime(root, sha) };
+  // Commit times are whole seconds; a session that ran in the same second as the commit still belongs to it.
+  const window = { from: parent ? commitTime(root, parent) : 0, to: commitTime(root, sha) + 999 };
   const { selected } = await findSessions(root, opts.home, { window });
   if (selected.length === 0) return null;
 

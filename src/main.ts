@@ -139,7 +139,7 @@ async function gather(root: string, range: string | null, v: Values, io: Io): Pr
   try {
     // For two refs the branch's work began at their merge base, not at wherever base points today.
     const from = head ? mergeBase(root, base, head) ?? base : base;
-    window = { from: commitTime(root, from), to: head ? commitTime(root, head) : io.now() };
+    window = { from: commitTime(root, from), to: head ? commitTime(root, head) + 999 : io.now() };
   } catch {
     io.stderr.write(`whyline: unknown revision in "${range}"\n`);
     return 1;

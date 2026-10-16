@@ -57,7 +57,7 @@ export function evaluate(d: AnnotatedDiff, verify: VerifyResult[] | null, policy
     }
   }
   if (policy.requireSignature && verify) {
-    const bad = verify.filter((r) => r.attached && (r.signature === 'unsigned' || r.signature === 'bad' || r.signature === null)).map((r) => short(r.sha));
+    const bad = verify.filter((r) => !r.attached || typeof r.signature !== 'object' || r.signature === null).map((r) => short(r.sha));
     if (bad.length) out.push({ rule: 'requireSignature', detail: `unsigned or bad: ${bad.join(', ')}` });
   }
   if (policy.allowedSigners && verify) {

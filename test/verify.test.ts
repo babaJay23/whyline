@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeRepo } from './helpers/tmp-repo.js';
-import { verifyCommits } from '../src/verify.js';
+import { verifyCommits, describeResult, allGood } from '../src/verify.js';
 import { noteAdd } from '../src/git.js';
 import { buildRecord } from '../src/record.js';
 import type { AnnotatedDiff } from '../src/types.js';
@@ -23,6 +23,15 @@ describe('verifyCommits', () => {
     ]);
   });
 
+  it('rejects a record that was copied from another commit', () => {
+    const r = makeRepo({ f: '1\n' });
+    const a = r.commit('a');
+    r.write('f', '2\n'); const b = r.commit('b');
+    noteAdd(r.dir, b, JSON.stringify(buildRecord(a, empty, { prompts: true, now: 0 }))); // a's record on b
+    expect(verifyCommits(r.dir, [b])[0]).toMatchObject({ attached: true, hash: 'wrong-commit' });
+    expect(describeResult(verifyCommits(r.dir, [b])[0]!)).toBe(`${b.slice(0, 7)}  attached  record is for ${a.slice(0, 7)}  unsigned`);
+  });
+
   it('defers signature checking to the injected verifier', () => {
     const r = makeRepo({ f: '1\n' });
     const a = r.commit('a');
@@ -30,6 +39,7 @@ describe('verifyCommits', () => {
     noteAdd(r.dir, a, JSON.stringify({ ...rec, signature: { format: 'ssh', signer: 'me@x', namespace: 'whyline', sig: 'SIG' } }));
     expect(verifyCommits(r.dir, [a], { verifySig: () => true })[0]!.signature).toEqual({ signer: 'me@x' });
     expect(verifyCommits(r.dir, [a], { verifySig: () => false })[0]!.signature).toBe('bad');
-    expect(verifyCommits(r.dir, [a])[0]!.signature).toBe('bad'); // no allowed_signers file configured, so it cannot verify
+    expect(verifyCommits(r.dir, [a])[0]!.signature).toBe('unverifiable'); // no allowed_signers file configured
+    expect(allGood(verifyCommits(r.dir, [a]))).toBe(false);
   });
 });

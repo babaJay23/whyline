@@ -96,6 +96,18 @@ describe('attach', () => {
     expect(res!.record.record.files[0]!.hunks[0]!.flags.map((f) => f.flag)).toEqual([]);
   });
 
+  it('finds a session that ran in the same second as the commit', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    session(home, r.dir, Date.now(), 'edit f.txt', 'f.txt', 'a', 'b'); // no gap before the commit
+    r.write('f.txt', 'b\n');
+    const c1 = r.commit('agent change');
+    const [res] = await attachCommits(r.dir, [c1], { prompts: true, now: Date.now(), home });
+    expect(res!.status).toBe('attached');
+  });
+
   it('handles a root commit with no parent', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));

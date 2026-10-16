@@ -39,7 +39,7 @@ describe('buildRecord', () => {
     const r = buildRecord('abc', diff, { prompts: true, now: Date.parse('2026-10-15T00:00:00Z') });
     expect(r).toMatchObject({ schemaVersion: 1, commit: 'abc', createdAt: '2026-10-15T00:00:00.000Z', prompts: true, signature: null });
     expect(r.hash).toBe(hashOf(r));
-    expect(r.record).toBe(diff);
+    expect(r.record).toEqual({ ...diff, sessions: [] });
   });
   it('blanks prompts when asked and the hash covers the blanked content', () => {
     const r = buildRecord('abc', diff, { prompts: false, now: 0 });
@@ -48,6 +48,23 @@ describe('buildRecord', () => {
     expect([p.prompt.text, p.reasoning?.text, p.agentBrief]).toEqual(['', '', '']);
     expect(r.record.files[0]!.hunks[0]!.flags[0]!.detail).toBe('prompt text not recorded');
     expect(r.hash).toBe(hashOf(r));
+  });
+});
+
+describe('buildRecord privacy', () => {
+  it('keeps only the excerpts the renderers show, and no machine paths', () => {
+    const long = 'x'.repeat(500);
+    const p2 = { ...prov, prompt: { text: long, at: 1 }, reasoning: { text: long, at: 2 }, agentBrief: long };
+    const d2: AnnotatedDiff = { ...diff, sessions: [{ harness: 'claude-code', id: 's1', path: '/Users/me/.claude/projects/x/s1.jsonl', cwd: '/Users/me/repo', startedAt: 0, endedAt: 1 }],
+      files: [{ ...diff.files[0]!, hunks: [{ ...diff.files[0]!.hunks[0]!, lead: p2, lines: [{ text: 'b', provenance: p2 }] }] }] };
+    const r = buildRecord('abc', d2, { prompts: true, now: 0 });
+    const lead = r.record.files[0]!.hunks[0]!.lead!;
+    expect(lead.prompt.text).toHaveLength(120);
+    expect(lead.reasoning!.text).toHaveLength(160);
+    expect(lead.agentBrief).toHaveLength(200);
+    expect(r.record.files[0]!.hunks[0]!.lines[0]!.provenance!.prompt.text).toHaveLength(120);
+    expect(r.record.sessions[0]).toEqual({ harness: 'claude-code', id: 's1', path: '', cwd: '', startedAt: 0, endedAt: 1 });
+    expect(d2.sessions[0]!.path).toContain('/Users'); // input untouched
   });
 });
 
@@ -65,5 +82,7 @@ describe('parseRecord', () => {
     expect(parseRecord('not json')).toBeNull();
     expect(parseRecord(JSON.stringify({ ...r, schemaVersion: 2 }))).toBeNull();
     expect(parseRecord(JSON.stringify({ hello: 1 }))).toBeNull();
+    expect(parseRecord(JSON.stringify({ ...r, record: { files: 'nope' } }))).toBeNull();
+    expect(parseRecord(JSON.stringify({ ...r, record: { ...r.record, totals: null } }))).toBeNull();
   });
 });

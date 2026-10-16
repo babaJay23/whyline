@@ -56,7 +56,7 @@ describe('evaluate', () => {
       { sha: 'c'.repeat(40), attached: true, hash: 'ok' as const, signature: 'unsigned' as const },
     ];
     expect(evaluate(diff, v, { requireRecords: true })).toEqual([{ rule: 'requireRecords', detail: 'missing or altered: bbbbbbb' }]);
-    expect(evaluate(diff, v, { requireSignature: true })).toEqual([{ rule: 'requireSignature', detail: 'unsigned or bad: ccccccc' }]);
+    expect(evaluate(diff, v, { requireSignature: true })).toEqual([{ rule: 'requireSignature', detail: 'unsigned or bad: bbbbbbb, ccccccc' }]); // a missing record is unsigned too
     expect(evaluate(diff, v, { allowedSigners: ['other@example.com'] })).toEqual([{ rule: 'allowedSigners', detail: 'dev@example.com signed aaaaaaa' }]);
     expect(evaluate(diff, v, { allowedSigners: ['dev@example.com'] })).toEqual([]);
   });

@@ -30,6 +30,7 @@ function claudeSession(home: string, cwd: string, at: number, prompt: string, ed
 }
 
 const settle = () => new Promise((r) => setTimeout(r, 1100)); // commit times have 1s resolution
+// Sessions are stamped half a second in the past so every edit is inside the window even on a fast runner.
 
 describe('whyline (e2e)', () => {
   it('exits 2 outside a git repo', async () => {
@@ -55,7 +56,7 @@ describe('whyline (e2e)', () => {
     r.commit('init');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now(), 'change two to 2 in src/a.ts', [
+    claudeSession(home, r.dir, Date.now() - 500, 'change two to 2 in src/a.ts', [
       { file: 'src/a.ts', old: 'two', neu: '2' },
       { file: 'src/z.ts', old: 'z', neu: 'zz' },
     ]);
@@ -89,7 +90,7 @@ describe('whyline (e2e)', () => {
     const base = r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now(), 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     await settle();
     const head = r.commit('agent change');
@@ -110,7 +111,7 @@ describe('whyline (e2e)', () => {
     r.git('checkout', '-q', '-b', 'work');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now(), 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     await settle();
     r.commit('agent change on work');
@@ -131,7 +132,7 @@ describe('whyline (e2e)', () => {
     r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now(), 'hello', []);
+    claudeSession(home, r.dir, Date.now() - 500, 'hello', []);
     writeFileSync(join(r.dir, 'img.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x1a, 0xff, 0xfe]));
     r.write('notes.txt', 'text\n');
     const o = io(r.dir, home);
@@ -144,7 +145,7 @@ describe('whyline (e2e)', () => {
     r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now(), 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     const bad = io(r.dir, home);
     expect(await run(['--html', home], bad)).toBe(1); // a directory, not a file
@@ -169,7 +170,7 @@ describe('whyline (e2e)', () => {
     r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now(), 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     const prices = join(home, 'prices.json');
     writeFileSync(prices, JSON.stringify({ 'test-model': { input: 1_000_000, output: 1_000_000, cacheRead: 0, cacheWrite: 0 } }));
@@ -193,7 +194,7 @@ describe('whyline (e2e)', () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     r.commit('base');
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now(), 'hello', []);
+    claudeSession(home, r.dir, Date.now() - 500, 'hello', []);
     const s = io(r.dir, home);
     expect(await run(['sessions'], s)).toBe(0);
     expect(s.out).toContain('claude-code');

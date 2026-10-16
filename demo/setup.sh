@@ -33,3 +33,4 @@ PY
 printf 'export enum Mode {\n  TRANSLATION = "translation",\n  TEXT_TO_SPEECH = "tts",\n  TRANSCRIPTION = "stt",\n}\n' > src/modes.ts
 printf 'export const retries = 5;\n' > src/config.ts
 printf 'scratch notes\n' > TODO.md
+printf '{ "forbid": ["unrequested"], "maxUntracedRatio": 0.2 }\n' > .whyline.json

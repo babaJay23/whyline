@@ -56,6 +56,20 @@ whyline export [range] --format agent-trace
 whyline check [range] --policy .whyline.json   # exit 4 on a violation (see below)
 ```
 
+## More demos
+
+**Brief mode and cost.** `--brief` prints the verdict, each turn's ask, and the flagged hunks with no diff bodies: a few lines an agent or a CI job can read cheaply. `--prices default` adds a dollar estimate per turn at the vendors' list prices; it is off unless asked for, because subscriptions are not billed per token.
+
+![brief mode and prices](docs/demo-brief.gif)
+
+**Keeping the record.** `attach` writes the report for a commit into git notes, with a hash. The note is plain JSON you can read with `git notes --ref whyline show`. `verify` checks that every commit in a range has a record and that none has been altered, on any machine with the notes fetched, with no transcript present.
+
+![attach and verify](docs/demo-attach.gif)
+
+**Policy in CI.** `check` evaluates a small JSON policy against the review and exits 4 on a violation. `--format md` prints the same result as Markdown for a pull request comment.
+
+![check with a policy](docs/demo-check.gif)
+
 ## Tokens and cost
 
 Every turn shows the tokens the model processed fresh and, separately, how many it read from cache. Cache reads are cheap per token but tell you how much context the turn was carrying.

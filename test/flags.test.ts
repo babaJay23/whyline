@@ -18,11 +18,11 @@ const repo: RepoFiles = {
 function prov(over: Partial<Provenance> = {}): Provenance {
   return {
     harness: 'claude-code', sessionId: 's1', turnId: 't1', turnNumber: 1, agentId: 's1', agentName: null, agentBrief: null,
-    prompt: { text: 'change src/a.ts', at: 100 }, reasoning: null, tool: 'Edit', editId: 'e1', at: 100, turnCost: null, turnModel: null, turnCostUsd: null, ...over,
+    prompt: { text: 'change src/a.ts per #42', at: 100 }, reasoning: null, tool: 'Edit', editId: 'e1', at: 100, turnCost: null, turnModel: null, turnCostUsd: null, ...over,
   };
 }
 function turn(over: Partial<Turn> = {}): Turn {
-  return { id: 't1', sessionId: 's1', harness: 'claude-code', prompt: { kind: 'prompt', id: 'p', sessionId: 's1', agentId: 's1', turnId: 't1', at: 100, text: 'change src/a.ts' }, reasoning: [], usage: null, interrupted: false, prevInterrupted: false, firstAt: 100, ...over };
+  return { id: 't1', sessionId: 's1', harness: 'claude-code', prompt: { kind: 'prompt', id: 'p', sessionId: 's1', agentId: 's1', turnId: 't1', at: 100, text: 'change src/a.ts per #42' }, reasoning: [], usage: null, interrupted: false, prevInterrupted: false, firstAt: 100, number: 1, model: null, specRefs: ['#42'], specFrom: null, ...over };
 }
 function edit(turnId: string, text: string, at: number): EditEvent {
   return { kind: 'edit', id: `e-${at}`, sessionId: 's1', agentId: 's1', turnId, at, tool: 'Edit', file: '/repo/src/a.ts', op: { type: 'replace', old: 'x', new: text, all: false } };
@@ -30,7 +30,7 @@ function edit(turnId: string, text: string, at: number): EditEvent {
 function facts(over: Partial<HunkFacts> = {}): HunkFacts {
   const p = prov();
   const lines: AnnotatedLine[] = [{ text: 'export const a = b;', provenance: p }];
-  return { file: 'src/a.ts', lines, lead: p, turn: turn(), table: { lines: [], driftedAt: null, failed: [] }, fileEdits: [], shells: [], repo, ...over };
+  return { file: 'src/a.ts', lines, lead: p, turn: turn(), table: { lines: [], driftedAt: null, failed: [] }, fileEdits: [], shells: [], repo, extraSpecRefs: [], ...over };
 }
 const flags = (f: HunkFacts) => flagHunk(f).map((h) => h.flag);
 
@@ -80,21 +80,21 @@ describe('flagHunk', () => {
   });
 
   it('unrequested when the prompt named other files that do not import this one', () => {
-    expect(flags(facts({ file: 'src/c.ts', turn: turn({ prompt: { ...turn().prompt!, text: 'edit src/a.ts' } }) }))).toEqual(['unrequested']);
+    expect(flags(facts({ file: 'src/c.ts', turn: turn({ prompt: { ...turn().prompt!, text: 'edit src/a.ts per #42' } }) }))).toEqual(['unrequested']);
   });
 
   it('not unrequested when this file is named, imported by a named file, or the prompt names no file', () => {
     expect(flags(facts({ file: 'src/a.ts' }))).toEqual([]);
     expect(flags(facts({ file: 'src/b.ts' }))).toEqual([]); // a.ts imports ./b
-    expect(flags(facts({ file: 'src/c.ts', turn: turn({ prompt: { ...turn().prompt!, text: 'fix the failing tests' } }) }))).toEqual([]);
+    expect(flags(facts({ file: 'src/c.ts', turn: turn({ prompt: { ...turn().prompt!, text: 'fix the failing tests for #42' } }) }))).toEqual([]);
     expect(flags(facts({ file: 'src/c.ts', turn: null, lead: null, lines: [{ text: 'x', provenance: null }] }))).toEqual(['untraced']);
   });
 
   it('after-correction on correction words in the first 80 chars or a previously interrupted turn', () => {
-    const corrected = turn({ prompt: { ...turn().prompt!, text: "no, don't touch src/a.ts like that" } });
+    const corrected = turn({ prompt: { ...turn().prompt!, text: "no, don't touch src/a.ts like that, see #42" } });
     expect(flags(facts({ turn: corrected }))).toEqual(['after-correction']);
     expect(flags(facts({ turn: turn({ prevInterrupted: true }) }))).toEqual(['after-correction']);
-    const late = turn({ prompt: { ...turn().prompt!, text: 'please update src/a.ts with the new enum member, run the whole suite and make sure the tests pass; no need to touch docs' } });
+    const late = turn({ prompt: { ...turn().prompt!, text: 'please update src/a.ts with the new enum member, run the whole suite and make sure the tests pass; no need to touch docs (#42)' } });
     expect(flags(facts({ turn: late }))).toEqual([]); // "no" is past the 80-char window
   });
 
@@ -117,6 +117,15 @@ describe('flagHunk', () => {
     const hits = flagHunk(facts({ lead: prov({ agentId: 'abc', agentName: 'helper', agentBrief: 'write g' }) }));
     expect(hits.map((h) => h.flag)).toEqual(['subagent']);
     expect(hits[0]!.detail).toBe('helper');
+  });
+
+  it('unspecified when neither the turn, an earlier turn, nor the commit references a spec', () => {
+    const t = turn({ prompt: { ...turn().prompt!, text: 'change src/a.ts' }, specRefs: [] });
+    expect(flags(facts({ turn: t }))).toEqual(['unspecified']);
+    expect(flags(facts({ turn: { ...t, specRefs: ['#12'] } }))).toEqual([]);
+    expect(flags(facts({ turn: { ...t, specFrom: { turn: 1, ref: '#12' } } }))).toEqual([]);
+    expect(flags(facts({ turn: t, extraSpecRefs: ['#12'] }))).toEqual([]);
+    expect(flags(facts({ turn: null, lead: null, lines: [{ text: 'x', provenance: null }] }))).toEqual(['untraced']);
   });
 
   it('orders multiple flags by severity', () => {

@@ -91,7 +91,7 @@ export interface LineTable {
 
 // ---- resolved output ----
 
-export type Flag = 'untraced' | 'unrequested' | 'after-correction' | 'subagent' | 'churned' | 'drifted';
+export type Flag = 'untraced' | 'unrequested' | 'after-correction' | 'unspecified' | 'subagent' | 'churned' | 'drifted';
 
 export interface FlagHit {
   flag: Flag;

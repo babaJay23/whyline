@@ -12,7 +12,7 @@ const diff: AnnotatedDiff = {
   files: [{ path: 'f.ts', status: 'modified', turnIds: ['t1'], cost: null, costUsd: null, ledgerMismatch: false, driftedAt: null,
     hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, removed: ['a'], lines: [{ text: 'b', provenance: prov }], lead: prov, otherTurns: 0,
       flags: [{ flag: 'after-correction', detail: 'prompt begins "add the thing"' }] }] }],
-  totals: { files: 1, hunks: 1, flagged: { untraced: 0, unrequested: 0, 'after-correction': 1, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 }, costUsd: null, unpricedModels: [] },
+  totals: { files: 1, hunks: 1, flagged: { untraced: 0, unrequested: 0, 'after-correction': 1, unspecified: 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 }, costUsd: null, unpricedModels: [] },
 };
 
 describe('canonicalJson', () => {

@@ -21,7 +21,7 @@ describe('resolve', () => {
   const beforeA = 'one\ntwo\nthree\n';
   const afterA = 'one\n2\nthree\n';
   const events: Event[] = [
-    { kind: 'prompt', id: 'p1', ...base, turnId: 't1', at: 200, text: 'change two to 2 in a.ts' },
+    { kind: 'prompt', id: 'p1', ...base, turnId: 't1', at: 200, text: 'change two to 2 in a.ts for #77' },
     { kind: 'reasoning', id: 'r1', ...base, turnId: 't1', at: 210, text: 'Replacing two with 2.', visible: true },
     { kind: 'edit', id: 'e1', ...base, turnId: 't1', at: 220, tool: 'Edit', file: '/repo/a.ts', op: { type: 'replace', old: 'two', new: '2', all: false } },
     { kind: 'usage', id: 'u1', ...base, turnId: 't1', at: 230, input: 10, output: 5, cacheRead: 0, cacheWrite: 0, model: 'claude-opus-5' },
@@ -46,7 +46,7 @@ describe('resolve', () => {
     expect(hunk!.lines).toHaveLength(1);
     const p = hunk!.lines[0]!.provenance!;
     expect(p).toMatchObject({ harness: 'claude-code', sessionId: 's1', turnId: 't1', turnNumber: 1, agentId: 's1', agentName: null, tool: 'Edit', editId: 'e1', at: 220 });
-    expect(p.prompt.text).toBe('change two to 2 in a.ts');
+    expect(p.prompt.text).toBe('change two to 2 in a.ts for #77');
     expect(p.reasoning?.text).toBe('Replacing two with 2.');
     expect(p.turnCost).toEqual({ input: 10, output: 5, cacheRead: 0, cacheWrite: 0 });
     expect(hunk!.lead).toEqual(p);
@@ -62,7 +62,7 @@ describe('resolve', () => {
     expect(noPrices.totals.costUsd).toBeNull(); // dollars only appear when a price table is supplied
     expect(file!.cost).toEqual(p.turnCost);
     expect(file!.ledgerMismatch).toBe(false);
-    expect(out.totals).toEqual({ files: 1, hunks: 1, flagged: { untraced: 0, unrequested: 0, 'after-correction': 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 }, costUsd: 0.000175, unpricedModels: [] });
+    expect(out.totals).toEqual({ files: 1, hunks: 1, flagged: { untraced: 0, unrequested: 0, 'after-correction': 0, unspecified: 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 }, costUsd: 0.000175, unpricedModels: [] });
   });
 
   it('ignores edits outside the window and reports the line untraced', () => {
@@ -145,7 +145,7 @@ describe('resolve', () => {
 
   it('shows the turn of the shell command that touched an untraced file, without attributing its lines', () => {
     const evs: Event[] = [
-      { kind: 'prompt', id: 'p1', ...base, turnId: 't1', at: 200, text: 'write the cli entry point' },
+      { kind: 'prompt', id: 'p1', ...base, turnId: 't1', at: 200, text: 'write the cli entry point for #77' },
       { kind: 'reasoning', id: 'r1', ...base, turnId: 't1', at: 205, text: 'Writing src/cli.ts with a heredoc.', visible: true },
       { kind: 'shell', id: 'sh1', ...base, turnId: 't1', at: 210, command: "cat > src/cli.ts <<'EOF'\nmain()\nEOF", touches: ['src/cli.ts'] },
       { kind: 'usage', id: 'u1', ...base, turnId: 't1', at: 220, input: 9, output: 9, cacheRead: 0, cacheWrite: 0 },
@@ -157,7 +157,7 @@ describe('resolve', () => {
     expect(h.flags.map((f) => f.flag)).toEqual(['untraced']);
     expect(h.flags[0]!.detail).toContain('cat > src/cli.ts');
     expect(h.lead).toMatchObject({ tool: 'shell', editId: 'sh1', turnId: 't1', turnCost: { input: 9, output: 9, cacheRead: 0, cacheWrite: 0 } });
-    expect(h.lead?.prompt.text).toBe('write the cli entry point');
+    expect(h.lead?.prompt.text).toBe('write the cli entry point for #77');
     expect(h.lead?.reasoning?.text).toBe('Writing src/cli.ts with a heredoc.');
     expect(out.files[0]!.cost).toEqual({ input: 9, output: 9, cacheRead: 0, cacheWrite: 0 });
   });
@@ -179,7 +179,7 @@ describe('resolve', () => {
     const byHand = run({ diffs: del, baseText: () => 'bye\n', headText: () => null, repo: repoOf({}) });
     expect(byHand.files[0]!.hunks[0]!.flags.map((f) => f.flag)).toEqual(['untraced']);
     const evs: Event[] = [
-      { kind: 'prompt', id: 'p', ...base, turnId: 't1', at: 200, text: 'remove gone.ts' },
+      { kind: 'prompt', id: 'p', ...base, turnId: 't1', at: 200, text: 'remove gone.ts for #77' },
       { kind: 'edit', id: 'rm1', ...base, turnId: 't1', at: 210, tool: 'apply_patch', file: '/repo/gone.ts', op: { type: 'delete' } },
     ];
     const byAgent = run({ diffs: del, sessions: [session(evs)], baseText: () => 'bye\n', headText: () => null, repo: repoOf({}) });
@@ -205,7 +205,7 @@ describe('resolve', () => {
 
   it('names subagents from spawn events', () => {
     const evs: Event[] = [
-      { kind: 'prompt', id: 'p1', ...base, turnId: 't1', at: 200, text: 'make g.ts' },
+      { kind: 'prompt', id: 'p1', ...base, turnId: 't1', at: 200, text: 'make g.ts for #77' },
       { kind: 'spawn', id: 'sp', ...base, turnId: 't1', at: 205, childAgentId: 'abc', name: 'helper', brief: 'write g' },
       { kind: 'edit', id: 'w', sessionId: 's1', agentId: 'abc', turnId: 't1', at: 210, tool: 'Write', file: '/repo/g.ts', op: { type: 'write', content: 'g\n' } },
     ];

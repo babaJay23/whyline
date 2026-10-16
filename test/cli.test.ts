@@ -66,10 +66,10 @@ describe('whyline (e2e)', () => {
 
     const o = io(r.dir, home);
     expect(await run([], o)).toBe(0);
-    expect(o.out).toMatch(/^3 hunks across 3 files, 2 need a look: 1 untraced, 1 unrequested\n/);
+    expect(o.out).toMatch(/^3 hunks across 3 files, 3 need a look: 1 untraced, 1 unrequested, 2 unspecified\n/);
     expect(o.out).toContain('  src/z.ts @@ -1 +1 @@\n    ! unrequested  prompt named src/a.ts');
     expect(o.out).toContain('  new.txt @@ -0,0 +1 @@\n    ! untraced');
-    expect(o.out).toContain('unflagged:\n  src/a.ts  1 hunk  1 turn  72 tokens');
+    expect(o.out).not.toContain('unflagged:'); // the requested hunk still had no spec behind it
 
     const j = io(r.dir, home);
     expect(await run(['--json'], j)).toBe(0);
@@ -90,7 +90,7 @@ describe('whyline (e2e)', () => {
     const base = r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt per #10', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     await settle();
     const head = r.commit('agent change');
@@ -98,7 +98,7 @@ describe('whyline (e2e)', () => {
     const o = io(r.dir, home);
     expect(await run([`${base}..${head}`, '--all'], o)).toBe(0);
     expect(o.out).toContain('1 hunk across 1 file, nothing flagged');
-    expect(o.out).toContain('you asked: edit f.txt');
+    expect(o.out).toContain('you asked: edit f.txt per #10');
 
     const miss = io(r.dir, home);
     expect(await run([`${base}..${head}`, '--session', 'nope'], miss)).toBe(3);
@@ -111,7 +111,7 @@ describe('whyline (e2e)', () => {
     r.git('checkout', '-q', '-b', 'work');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt per #10', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     await settle();
     r.commit('agent change on work');
@@ -124,7 +124,7 @@ describe('whyline (e2e)', () => {
     const o = io(r.dir, home);
     expect(await run(['main...work', '--all'], o)).toBe(0);
     expect(o.out).toContain('1 hunk across 1 file, nothing flagged');
-    expect(o.out).toContain('you asked: edit f.txt');
+    expect(o.out).toContain('you asked: edit f.txt per #10');
   });
 
   it('skips untracked binary files', async () => {
@@ -145,7 +145,7 @@ describe('whyline (e2e)', () => {
     r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt per #10', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     const bad = io(r.dir, home);
     expect(await run(['--html', home], bad)).toBe(1); // a directory, not a file
@@ -170,7 +170,7 @@ describe('whyline (e2e)', () => {
     r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt per #10', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     const prices = join(home, 'prices.json');
     writeFileSync(prices, JSON.stringify({ 'test-model': { input: 1_000_000, output: 1_000_000, cacheRead: 0, cacheWrite: 0 } }));
@@ -195,7 +195,7 @@ describe('whyline (e2e)', () => {
     r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt per #10', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     await settle();
     const head = r.commit('agent change');
@@ -215,7 +215,7 @@ describe('whyline (e2e)', () => {
     const base = r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt per #10', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     await settle();
     const c1 = r.commit('agent change');
@@ -249,7 +249,7 @@ describe('whyline (e2e)', () => {
     const base = r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt per #10', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     await settle();
     const c1 = r.commit('agent change');
@@ -270,7 +270,7 @@ describe('whyline (e2e)', () => {
     const base = r.commit('base');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt per #10', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
     r.write('f.txt', 'b\n');
     await settle();
     const c1 = r.commit('agent change');

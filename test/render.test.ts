@@ -29,7 +29,7 @@ const diff: AnnotatedDiff = {
     { path: 'docs/notes.md', status: 'added', hunks: [flagged], turnIds: ['p3'], cost: prov.turnCost, costUsd: 0.001, ledgerMismatch: false, driftedAt: null },
     { path: 'src/a.ts', status: 'modified', hunks: [plain, untraced], turnIds: ['p1'], cost: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 }, costUsd: 0.001, ledgerMismatch: true, driftedAt: null },
   ],
-  totals: { files: 2, hunks: 3, flagged: { untraced: 1, unrequested: 1, 'after-correction': 1, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 130, output: 28, cacheRead: 1200, cacheWrite: 0 }, costUsd: 0.002, unpricedModels: [] },
+  totals: { files: 2, hunks: 3, flagged: { untraced: 1, unrequested: 1, 'after-correction': 1, unspecified: 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 130, output: 28, cacheRead: 1200, cacheWrite: 0 }, costUsd: 0.002, unpricedModels: [] },
 };
 
 describe('fmtTokens', () => {

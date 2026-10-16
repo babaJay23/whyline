@@ -1,4 +1,5 @@
-import { commitTime, diffText, lsTree, noteAdd, parents, show } from './git.js';
+import { commitMessage, commitTime, diffText, lsTree, noteAdd, parents, show } from './git.js';
+import { specReferences } from './spec-refs.js';
 import { buildRecord, type IntentRecord } from './record.js';
 import { parseUnifiedDiff } from './resolve/diff.js';
 import { resolve } from './resolve/resolve.js';
@@ -62,6 +63,7 @@ export async function recordFor(root: string, sha: string, opts: AttachOptions):
     baseText: (p) => (parent ? show(root, parent, p) : null),
     headText: (p) => show(root, sha, p),
     repo, now: opts.now, ...(opts.prices ? { prices: opts.prices } : {}),
+    extraSpecRefs: specReferences(commitMessage(root, sha)),
   });
   return buildRecord(sha, diff, { prompts: opts.prompts, now: opts.now });
 }

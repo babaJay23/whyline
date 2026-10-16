@@ -16,9 +16,11 @@ export interface HunkFacts {
   fileEdits: EditEvent[];
   shells: ShellEvent[];
   repo: RepoFiles;
+  /** Spec references from outside the transcript, e.g. the commit message; they satisfy every hunk. */
+  extraSpecRefs: string[];
 }
 
-export const FLAG_ORDER: Flag[] = ['untraced', 'unrequested', 'after-correction', 'drifted', 'churned', 'subagent'];
+export const FLAG_ORDER: Flag[] = ['untraced', 'unrequested', 'after-correction', 'unspecified', 'drifted', 'churned', 'subagent'];
 
 /** Short words only count when they open the prompt ("No. Use jq."), so "no-cache" and "there's no README" pass. */
 export const CORRECTION_WORDS = /^\W*(?:no|stop|undo)(?=[\s,.!:;]|$)|\b(?:don't|do not|revert|wrong|instead|not what i)\b/i;
@@ -47,6 +49,10 @@ export function flagHunk(f: HunkFacts): FlagHit[] {
     const head = (promptText ?? '').slice(0, CORRECTION_WINDOW);
     if (CORRECTION_WORDS.test(head)) push('after-correction', `prompt begins "${(promptText ?? '').slice(0, 60)}"`);
     else if (f.turn.prevInterrupted) push('after-correction', 'previous turn was interrupted');
+  }
+
+  if (f.turn && f.turn.specRefs.length === 0 && !f.turn.specFrom && f.extraSpecRefs.length === 0) {
+    push('unspecified', 'no issue, URL or spec document referenced');
   }
 
   if (f.table.driftedAt !== null && (f.lead === null || f.lead.at > f.table.driftedAt)) {

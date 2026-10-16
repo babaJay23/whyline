@@ -5,7 +5,7 @@ import { noteAdd } from '../src/git.js';
 import { buildRecord } from '../src/record.js';
 import type { AnnotatedDiff } from '../src/types.js';
 
-const empty: AnnotatedDiff = { schemaVersion: 1, range: 'r', generatedAt: 0, sessions: [], files: [], totals: { files: 0, hunks: 0, flagged: { untraced: 0, unrequested: 0, 'after-correction': 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: null, unpricedModels: [] } };
+const empty: AnnotatedDiff = { schemaVersion: 1, range: 'r', generatedAt: 0, sessions: [], files: [], totals: { files: 0, hunks: 0, flagged: { untraced: 0, unrequested: 0, 'after-correction': 0, unspecified: 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: null, unpricedModels: [] } };
 
 describe('verifyCommits', () => {
   it('reports missing, ok, and tampered records', () => {

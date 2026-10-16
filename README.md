@@ -6,24 +6,7 @@ Review what an AI coding agent did before you commit it.
 
 ```
 $ whyline
-3 hunks across 3 files, 2 need a look: 1 untraced, 1 unrequested
 
-no turn found
-  TODO.md @@ -0,0 +1 @@
-    ! untraced  no structured edit covers these lines
-    file differs from what the recorded edits produce; some lines were changed another way
-  +scratch notes
-
-turn 1 · claude-code · main agent · 2026-10-11 03:00 · 2.3k tokens · 72.0k from cache
-  you asked: add a TRANSCRIPTION member to the enum in src/modes.ts
-  agent said: Adding TRANSCRIPTION after TEXT_TO_SPEECH. While here, the retry count in config looks low for speech, so I'll raise it.
-  src/config.ts @@ -1 +1 @@
-    ! unrequested  prompt named src/modes.ts
-  -export const retries = 3;
-  +export const retries = 5;
-
-unflagged:
-  src/modes.ts  1 hunk  1 turn  2.3k tokens · 72.0k from cache
 ```
 
 The agent was asked for one enum member. It also changed a retry count in a file nobody mentioned, and explained why in a sentence you would have scrolled past. `TODO.md` was written by hand, so no turn accounts for it. The hunk you actually asked for is one line in the summary at the bottom.
@@ -37,6 +20,7 @@ No install, no hooks, no account. It works on sessions you ran last week.
 | `untraced` | no structured edit in any session accounts for these lines. Hand edits, shell edits (`sed`, heredocs), or a session whyline could not find. |
 | `unrequested` | your prompt named specific files and this is not one of them, nor imported by one. Only raised when the prompt named a file. |
 | `after-correction` | written in a turn whose prompt opens with "no", "stop" or "undo", or says "don't", "revert", "wrong" or "instead" in its first 80 characters, or that came right after you interrupted the agent. |
+| `unspecified` | nothing in the turn, an earlier turn of the same session, or the commit message points at an issue, a URL, or a spec-like document. The "did anyone write down what this is for" signal. |
 | `drifted` | an earlier edit in this file did not match when replayed, so attribution after it is best-effort. |
 | `churned` | the same lines were rewritten across three or more turns. |
 | `subagent` | written by a spawned agent whose reasoning you never saw directly. |
@@ -106,6 +90,8 @@ whyline attach              # write an intent record for HEAD into git notes (re
 whyline attach main..HEAD   # one record per commit
 whyline attach --push       # and push the notes ref to origin
 whyline verify main..HEAD   # every commit attached, unaltered?
+whyline install             # post-commit hook: attach a record to every commit from now on
+whyline install --sign      # and sign it with your git ssh signing key
 ```
 
 A record is exactly what `--json` prints for that commit, plus a hash. It holds the 120-character prompt excerpts and one line of agent reasoning per hunk, never the transcript. `--no-prompts` leaves even those out, for public repos.
@@ -113,6 +99,8 @@ A record is exactly what `--json` prints for that commit, plus a hash. It holds 
 On any machine with the notes fetched (`git fetch origin refs/notes/whyline:refs/notes/whyline`), `whyline <range>` renders from the records when no transcript is present, and says so in its second line.
 
 `whyline export main..HEAD --format agent-trace` prints the same records in the [Agent Trace](https://agent-trace.dev) format, one JSON line per commit.
+
+Signing uses `ssh-keygen -Y` with the key in `git config user.signingkey` (set `gpg.format ssh`); `verify` checks against `gpg.ssh.allowedSignersFile`, the same files git itself uses for signed commits.
 
 Records are produced on the author's machine from the author's transcripts: self-reported. The hash proves a record was not altered after it was written; it does not prove the transcript was honest.
 

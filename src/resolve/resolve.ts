@@ -19,6 +19,8 @@ export interface ResolveInput {
   now?: number;
   /** When given, turns and files carry USD estimates; otherwise every cost is null. */
   prices?: PriceTable;
+  /** Spec references from the commit message; they satisfy the unspecified rule for every hunk. */
+  extraSpecRefs?: string[];
 }
 
 export function resolve(input: ResolveInput): AnnotatedDiff {
@@ -75,7 +77,7 @@ function resolveFile(d: FileDiff, ix: EventIndex, input: ResolveInput): Annotate
   const ledgerMismatch = normalize(tableText(table)) !== normalize(actual);
 
   const used = new Set<number>();
-  const hunks = d.hunks.map((h) => resolveHunk(h, d.path, table, edits, shells, ix, input.repo, used, input.prices ?? null));
+  const hunks = d.hunks.map((h) => resolveHunk(h, d.path, table, edits, shells, ix, input.repo, used, input.prices ?? null, input.extraSpecRefs ?? []));
   const keys = new Map<string, string>();
   for (const h of hunks) for (const p of hunkProvenance(h)) keys.set(turnKey(p.sessionId, p.turnId), p.turnId);
   let cost: Usage | null = null;
@@ -97,7 +99,7 @@ const NEAR = 3;
  * single matching line within NEAR of it. A duplicate typed by hand therefore
  * stays untraced instead of borrowing the agent's receipt.
  */
-function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEvent[], shells: ShellEvent[], ix: EventIndex, repo: RepoFiles, used: Set<number>, prices: PriceTable | null): AnnotatedHunk {
+function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEvent[], shells: ShellEvent[], ix: EventIndex, repo: RepoFiles, used: Set<number>, prices: PriceTable | null, extraSpecRefs: string[]): AnnotatedHunk {
   const lines: AnnotatedLine[] = h.added.map((text, i) => {
     const want = strip(text);
     const at = h.newStart - 1 + i;
@@ -121,7 +123,7 @@ function resolveHunk(h: Hunk, file: string, table: LineTable, fileEdits: EditEve
   const turnIds = new Set(lines.filter((l) => l.provenance).map((l) => turnKey(l.provenance!.sessionId, l.provenance!.turnId)));
   const otherTurns = Math.max(0, turnIds.size - (lead ? 1 : 0));
   const turn: Turn | null = lead ? ix.turns.get(turnKey(lead.sessionId, lead.turnId)) ?? null : null;
-  const flags = flagHunk({ file, lines, lead, turn, table, fileEdits, shells, repo });
+  const flags = flagHunk({ file, lines, lead, turn, table, fileEdits, shells, repo, extraSpecRefs });
 
   return { oldStart: h.oldStart, oldLines: h.oldLines, newStart: h.newStart, newLines: h.newLines, removed: h.removed, lines, lead, otherTurns, flags };
 }

@@ -1,6 +1,6 @@
 {
   "name": "whyline",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "git blame for AI agents: which prompt wrote this line, what the agent was thinking, and what it cost",
   "license": "MIT",
   "repository": {

@@ -17,7 +17,7 @@ const diff: AnnotatedDiff = {
       { oldStart: 1, oldLines: 0, newStart: 40, newLines: 2, removed: [], lines: [], lead: null, otherTurns: 0, flags: [{ flag: 'untraced', detail: 'no structured edit covers these lines' }] },
     ] },
   ],
-  totals: { files: 1, hunks: 4, flagged: { untraced: 1, unrequested: 1, 'after-correction': 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 3, output: 1, cacheRead: 0, cacheWrite: 0 }, costUsd: null, unpricedModels: [] },
+  totals: { files: 1, hunks: 4, flagged: { untraced: 1, unrequested: 1, 'after-correction': 0, unspecified: 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 3, output: 1, cacheRead: 0, cacheWrite: 0 }, costUsd: null, unpricedModels: [] },
 };
 
 describe('toAgentTrace', () => {

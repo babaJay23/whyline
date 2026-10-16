@@ -1,5 +1,6 @@
 import type { EditEvent, Harness, PromptEvent, ReasoningEvent, Session, ShellEvent, Usage, Window } from '../types.js';
 import { ZERO_USAGE, addUsage } from '../types.js';
+import { specReferences } from '../spec-refs.js';
 
 export interface Turn {
   id: string;
@@ -13,6 +14,8 @@ export interface Turn {
   firstAt: number;
   number: number; // 1-based within the session, by time
   model: string | null; // the model behind most of the turn's tokens
+  specRefs: string[]; // from this turn's own prompt
+  specFrom: { turn: number; ref: string } | null; // the latest earlier turn that named one, when this did not
 }
 
 export interface EventIndex {
@@ -54,7 +57,7 @@ export function indexEvents(sessions: Session[], repoRoot: string): EventIndex {
       const key = turnKey(ref.id, id);
       let t = turns.get(key);
       if (!t) {
-        t = { id, sessionId: ref.id, harness: ref.harness, prompt: null, reasoning: [], usage: null, interrupted: false, prevInterrupted: false, firstAt: at, number: 0, model: null };
+        t = { id, sessionId: ref.id, harness: ref.harness, prompt: null, reasoning: [], usage: null, interrupted: false, prevInterrupted: false, firstAt: at, number: 0, model: null, specRefs: [], specFrom: null };
         turns.set(key, t);
       }
       if (at < t.firstAt) t.firstAt = at;
@@ -105,6 +108,13 @@ export function indexEvents(sessions: Session[], repoRoot: string): EventIndex {
     list.sort((a, b) => a.firstAt - b.firstAt);
     list.forEach((t, i) => { t.number = i + 1; });
     for (let i = 1; i < list.length; i++) list[i]!.prevInterrupted = list[i - 1]!.interrupted;
+    // Spec references come from each turn's own prompt, before prompt-less turns inherit an ask.
+    let lastSpec: { turn: number; ref: string } | null = null;
+    for (const t of list) {
+      t.specRefs = t.prompt ? specReferences(t.prompt.text) : [];
+      if (t.specRefs.length) lastSpec = { turn: t.number, ref: t.specRefs[0]! };
+      else t.specFrom = lastSpec;
+    }
     // A turn opened by harness plumbing rather than a person still answers to the last real ask.
     let lastPrompt: PromptEvent | null = null;
     for (const t of list) {

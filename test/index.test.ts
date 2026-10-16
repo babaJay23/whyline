@@ -60,6 +60,19 @@ describe('indexEvents', () => {
     expect(ix.turns.get(turnKey('sess-1', 'p1'))!.prompt?.text).toMatch(/^add a TRANSCRIPTION/);
   });
 
+  it('collects spec references per turn and inherits the latest earlier one', async () => {
+    const ix = await index();
+    expect(ix.turns.get(turnKey('sess-1', 'p1'))!.specRefs).toEqual([]);
+    const { selected } = await findSessions('/repo', HOME, { all: true });
+    const s1 = selected.find((s) => s.ref.id === 'sess-1')!;
+    s1.events.push({ kind: 'prompt', id: 'x', sessionId: 'sess-1', agentId: 'sess-1', turnId: 'q1', at: Date.parse('2026-10-01T10:00:30Z'), text: 'implement #77' });
+    s1.events.push({ kind: 'prompt', id: 'y', sessionId: 'sess-1', agentId: 'sess-1', turnId: 'q2', at: Date.parse('2026-10-01T10:00:40Z'), text: 'now the tests' });
+    const ix2 = indexEvents(selected, '/repo');
+    const q1 = ix2.turns.get(turnKey('sess-1', 'q1'))!;
+    expect(q1.specRefs).toEqual(['#77']);
+    expect(ix2.turns.get(turnKey('sess-1', 'q2'))!.specFrom).toEqual({ turn: q1.number, ref: '#77' });
+  });
+
   it('groups edits by repo-relative path across harnesses', async () => {
     const ix = await index();
     expect([...ix.editsByFile.keys()].sort()).toEqual(['docs/notes.md', 'src/a.ts', 'src/b.ts', 'src/new.ts', 'src/util.ts', 'src/x.ts']);

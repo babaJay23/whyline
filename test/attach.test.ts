@@ -82,6 +82,20 @@ describe('attach', () => {
     expect(verifyCommits(r.dir, [c1])[0]!.signature).toEqual({ signer: 'dev@example.com' }); // the earlier good record was not replaced
   });
 
+  it('treats a Spec: trailer in the commit message as satisfying every hunk', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    session(home, r.dir, Date.now() - 500, 'edit f.txt', 'f.txt', 'a', 'b');
+    r.write('f.txt', 'b\n');
+    await settle();
+    const c1 = r.commit('agent change\n\nSpec: docs/design.md');
+    const [res] = await attachCommits(r.dir, [c1], { prompts: true, now: Date.now(), home });
+    if (res!.status !== 'attached') throw new Error(res!.status);
+    expect(res!.record.record.files[0]!.hunks[0]!.flags.map((f) => f.flag)).toEqual([]);
+  });
+
   it('handles a root commit with no parent', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));

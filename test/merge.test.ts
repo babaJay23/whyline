@@ -8,7 +8,7 @@ const mk = (path: string, flag: 'untraced' | null, cost: number | null, sessionI
   sessions: [{ harness: 'claude-code', id: sessionId, path: '/p', cwd: '/r', startedAt: 0, endedAt: 1 }],
   files: [{ path, status: 'modified', turnIds: [], cost: { input: 1, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: cost, ledgerMismatch: false, driftedAt: null,
     hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, removed: [], lines: [{ text: 'x', provenance: null }], lead: null, otherTurns: 0, flags: flag ? [{ flag, detail: 'd' }] : [] }] }],
-  totals: { files: 1, hunks: 1, flagged: { untraced: flag ? 1 : 0, unrequested: 0, 'after-correction': 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 1, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: cost, unpricedModels: cost === null ? ['m'] : [] },
+  totals: { files: 1, hunks: 1, flagged: { untraced: flag ? 1 : 0, unrequested: 0, 'after-correction': 0, unspecified: 0, subagent: 0, churned: 0, drifted: 0 }, cost: { input: 1, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: cost, unpricedModels: cost === null ? ['m'] : [] },
 });
 
 describe('mergeRecords', () => {

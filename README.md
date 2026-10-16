@@ -44,12 +44,14 @@ whyline main..HEAD           # any git range
 whyline --html out.html      # self-contained report
 whyline --json               # everything, for scripts
 whyline --brief              # headers and flags only; cheap for an agent to read
+whyline --format md          # Markdown for a PR description
 whyline --prices default     # add dollar estimates at list prices
 whyline sessions             # which sessions it found for this repo
 whyline doctor               # what it can and cannot see on this machine
 whyline attach [range]       # keep the record with the code (see below)
 whyline verify [range]       # are the records present and unaltered?
 whyline export [range] --format agent-trace
+whyline check [range] --policy .whyline.json   # exit 4 on a violation (see below)
 ```
 
 ## Tokens and cost
@@ -103,6 +105,35 @@ On any machine with the notes fetched (`git fetch origin refs/notes/whyline:refs
 Signing uses `ssh-keygen -Y` with the key in `git config user.signingkey` (set `gpg.format ssh`); `verify` checks against `gpg.ssh.allowedSignersFile`, the same files git itself uses for signed commits.
 
 Records are produced on the author's machine from the author's transcripts: self-reported. The hash proves a record was not altered after it was written; it does not prove the transcript was honest.
+
+## In a pull request
+
+On the author's machine, `whyline install` means every commit carries a record. Push the notes with the branch:
+
+```
+git push origin main refs/notes/whyline
+```
+
+Then a CI job can review the branch without any transcript:
+
+```yaml
+- uses: actions/checkout@v4
+  with: { fetch-depth: 0 }
+- run: git fetch origin refs/notes/whyline:refs/notes/whyline
+- run: npx whyline check origin/main...HEAD --policy .whyline.json --format md > whyline.md || true
+- uses: marocchino/sticky-pull-request-comment@v2
+  with: { path: whyline.md }
+```
+
+`.whyline.json`:
+
+```json
+{ "requireRecords": true, "maxUntracedRatio": 0.3, "forbid": ["unspecified"], "subagentNeedsBrief": true }
+```
+
+`check` exits 4 on a violation, so drop the `|| true` to fail the job.
+
+What this is and is not: the record is produced on the author's machine from the author's transcripts. The hash proves it was not altered afterwards and a signature proves which key wrote it; neither proves the transcript was honest. Use `check` as a review aid and a nudge toward writing down what each change is for. It is not an authorization control.
 
 ## Related tools
 

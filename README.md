@@ -9,6 +9,8 @@ $ whyline
 
 ```
 
+![whyline on a small change](docs/demo.gif)
+
 The agent was asked for one enum member. It also changed a retry count in a file nobody mentioned, and explained why in a sentence you would have scrolled past. `TODO.md` was written by hand, so no turn accounts for it. The hunk you actually asked for is one line in the summary at the bottom.
 
 No install, no hooks, no account. It works on sessions you ran last week.

@@ -10,6 +10,7 @@ import { parseRecord } from './record.js';
 import { allGood, describeResult, verifyCommits } from './verify.js';
 import { hookStatus, installHook, lastError, uninstallHook } from './hooks.js';
 import { signingKey } from './sign.js';
+import { evaluate, parsePolicy, type Policy } from './policy.js';
 import { randomUUID } from 'node:crypto';
 import { renderHtml } from './render/html.js';
 import { renderJson } from './render/json.js';
@@ -44,6 +45,7 @@ whyline export [range] --format agent-trace   print one Agent Trace record per c
 whyline verify [range]           check attached records: present, unaltered, signed
 whyline install [--sign] [--no-prompts]   add a post-commit hook that attaches a record to every commit
 whyline uninstall                remove that hook
+whyline check [range] [--policy <file>] [--format text|md]   evaluate a policy; exit 4 on violation
 
 options
   --all            show unflagged hunks too
@@ -78,6 +80,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (cmd === 'attach') return attach(root, args.positionals[1] ?? 'HEAD', args.values, io);
   if (cmd === 'export') return exportCmd(root, args.positionals[1] ?? 'HEAD', args.values, io);
   if (cmd === 'verify') return verifyCmd(root, args.positionals[1] ?? 'HEAD', io);
+  if (cmd === 'check') return check(root, args.positionals[1] ?? null, args.values, io);
   if (cmd === 'install') {
     const { path, created } = installHook(root, { sign: args.values.sign, prompts: !args.values['no-prompts'] });
     io.stdout.write(`${created ? 'installed' : 'updated'} post-commit hook at ${path}\n`);
@@ -113,6 +116,7 @@ function parseOptions(argv: string[]) {
       sign: { type: 'boolean', default: false },
       key: { type: 'string' },
       format: { type: 'string' },
+      policy: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -202,6 +206,30 @@ async function gather(root: string, range: string | null, v: Values, io: Io): Pr
     ...(prices ? { prices } : {}),
   });
   return { result, banner: null, shas };
+}
+
+async function check(root: string, range: string | null, v: Values, io: Io): Promise<number> {
+  if (v.format && v.format !== 'md' && v.format !== 'text') { io.stderr.write(`whyline: --format must be text or md\n\n${USAGE}`); return 1; }
+  let policy: Policy = {};
+  if (v.policy) {
+    let text: string;
+    try { text = readFileSync(v.policy, 'utf8'); } catch (e) { io.stderr.write(`whyline: cannot read policy ${v.policy}: ${(e as NodeJS.ErrnoException).code}\n`); return 1; }
+    const parsed = parsePolicy(text);
+    if (typeof parsed === 'string') { io.stderr.write(`whyline: ${parsed}\n`); return 1; }
+    policy = parsed;
+  }
+  const g = await gather(root, range, v, io);
+  if (typeof g === 'number') return g;
+  const verify = g.shas ? verifyCommits(root, g.shas) : null;
+  const violations = evaluate(g.result, verify, policy);
+  const extra = g.banner ? { banner: g.banner } : {};
+  if (v.format === 'md') {
+    io.stdout.write(renderMarkdown(g.result, { all: v.all, violations, ...extra }));
+  } else {
+    io.stdout.write(violations.length ? `policy: FAIL\n${violations.map((x) => `  ${x.rule}: ${x.detail}`).join('\n')}\n` : v.policy ? 'policy: PASS\n' : 'policy: PASS (no policy given)\n');
+    io.stdout.write(renderTerminal(g.result, { color: false, all: v.all, brief: true, ...extra }));
+  }
+  return violations.length ? 4 : 0;
 }
 
 async function review(root: string, range: string | null, v: Values, io: Io): Promise<number> {

@@ -318,6 +318,29 @@ describe('whyline (e2e)', () => {
     expect(await run(['--format', 'xml'], bad)).toBe(1);
   });
 
+  it('check fails with exit 4 on a forbidden flag and prints markdown', async () => {
+    const r = makeRepo({ 'src/a.ts': 'one\ntwo\n', 'src/z.ts': 'z\n' });
+    r.commit('init');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now() - 500, 'change two to 2 in src/a.ts per #77', [{ file: 'src/a.ts', old: 'two', neu: '2' }, { file: 'src/z.ts', old: 'z', neu: 'zz' }]);
+    r.write('src/a.ts', 'one\n2\n');
+    r.write('src/z.ts', 'zz\n');
+    const policy = join(home, 'policy.json');
+    writeFileSync(policy, JSON.stringify({ forbid: ['unrequested'] }));
+    const o = io(r.dir, home);
+    expect(await run(['check', '--policy', policy], o)).toBe(4);
+    expect(o.out).toMatch(/^policy: FAIL\n  forbid: 1 unrequested hunk\n/);
+    const md = io(r.dir, home);
+    expect(await run(['check', '--policy', policy, '--format', 'md'], md)).toBe(4);
+    expect(md.out).toContain('| forbid | 1 unrequested hunk |');
+    const report = io(r.dir, home);
+    expect(await run(['check'], report)).toBe(0);
+    expect(report.out).toMatch(/^policy: PASS \(no policy given\)\n/);
+    const missing = io(r.dir, home);
+    expect(await run(['check', '--policy', join(home, 'nope.json')], missing)).toBe(1);
+  });
+
   it('lists sessions and runs doctor', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     r.commit('base');

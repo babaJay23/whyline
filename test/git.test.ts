@@ -73,6 +73,9 @@ describe('git commits and notes', () => {
     r.write('f', '3\n'); const c = r.commit('c');
     expect(revList(r.dir, `${a}..${c}`)).toEqual([b, c]);
     expect(revList(r.dir, c)).toEqual([c]);
+    r.git('checkout', '-q', '-b', 'other', a);
+    r.write('f', 'x\n'); const x = r.commit('x');
+    expect(revList(r.dir, `${x}...${c}`)).toEqual([b, c]); // three dots mean "c since the merge base", never the symmetric difference
     expect(revList(r.dir, 'nope')).toEqual([]);
   });
 

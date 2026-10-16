@@ -73,7 +73,8 @@ export function revList(root: string, range: string): string[] {
     const one = git(root, ['rev-parse', '--verify', '-q', `${range}^{commit}`]);
     return one ? [one.trim()] : [];
   }
-  const out = git(root, ['rev-list', '--reverse', range, '--']);
+  const { base, head } = parseRange(range);
+  const out = git(root, ['rev-list', '--reverse', `${base}..${head ?? 'HEAD'}`, '--']);
   return out ? out.split('\n').filter(Boolean) : [];
 }
 

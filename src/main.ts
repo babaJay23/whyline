@@ -2,13 +2,14 @@ import { parseArgs } from 'node:util';
 import { writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { adapters } from './adapters/index.js';
-import { commitTime, diffText, gitDir, hasCommits, lsFiles, mergeBase, noteShow, parents, parseRange, pushNotes, readWorkingFile, repoRoot, revList, show, untracked } from './git.js';
+import { commitMessage, commitTime, diffText, hasCommits, lsFiles, mergeBase, noteShow, parents, parseRange, pushNotes, readWorkingFile, repoRoot, revList, show, untracked } from './git.js';
 import { mergeRecords, readRecords } from './merge.js';
 import { attachCommits, recordFor } from './attach.js';
 import { toAgentTrace } from './export/agent-trace.js';
 import { parseRecord } from './record.js';
 import { allGood, describeResult, verifyCommits } from './verify.js';
-import { hookStatus, installHook, lastError, uninstallHook } from './hooks.js';
+import { clearLastError, hookStatus, installHook, lastError, onPath, uninstallHook, writeLastError } from './hooks.js';
+import { specReferences } from './spec-refs.js';
 import { signingKey } from './sign.js';
 import { evaluate, parsePolicy, type Policy } from './policy.js';
 import { randomUUID } from 'node:crypto';
@@ -41,6 +42,7 @@ whyline attach [range]           write an intent record for each commit into git
   --push           push refs/notes/whyline to --remote (default origin) afterwards
   --quiet          print only failures (for hooks)
   --sign           sign the record with your git ssh signing key (--key <path> to override)
+  --since <when>   look for sessions back to an ISO date or Nd, e.g. after a rebase moved the commits
 whyline export [range] --format agent-trace   print one Agent Trace record per commit (JSON lines)
 whyline verify [range]           check attached records: present, unaltered, signed
 whyline install [--sign] [--no-prompts]   add a post-commit hook that attaches a record to every commit
@@ -82,8 +84,15 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (cmd === 'verify') return verifyCmd(root, args.positionals[1] ?? 'HEAD', io);
   if (cmd === 'check') return check(root, args.positionals[1] ?? null, args.values, io);
   if (cmd === 'install') {
-    const { path, created } = installHook(root, { sign: args.values.sign, prompts: !args.values['no-prompts'] });
-    io.stdout.write(`${created ? 'installed' : 'updated'} post-commit hook at ${path}\n`);
+    let hook: { path: string; created: boolean };
+    try {
+      hook = installHook(root, { sign: args.values.sign, prompts: !args.values['no-prompts'] });
+    } catch (e) {
+      io.stderr.write(`whyline: ${(e as Error).message}\n`);
+      return 1;
+    }
+    io.stdout.write(`${hook.created ? 'installed' : 'updated'} post-commit hook at ${hook.path}\n`);
+    if (!onPath(io.env)) io.stderr.write('whyline: whyline is not on PATH, so the hook cannot run; install it globally (npm i -g whyline)\n');
     return 0;
   }
   if (cmd === 'uninstall') {
@@ -164,7 +173,10 @@ async function gather(root: string, range: string | null, v: Values, io: Io): Pr
   }
   if (diffs.length === 0) { io.stdout.write('no changes\n'); return 2; }
 
-  const shas = head ? revList(root, `${base}..${head}`).filter((s) => parents(root, s).length <= 1) : null;
+  const all = head ? revList(root, `${base}..${head}`) : null;
+  const shas = all ? all.filter((s) => parents(root, s).length <= 1) : null;
+  const merges = all ? all.length - shas!.length : 0;
+  if (merges) io.stderr.write(`whyline: ${merges} merge ${merges === 1 ? 'commit has' : 'commits have'} no record of its own; see the branch it merged\n`);
   const ids = v.session && v.session.length ? v.session : undefined;
   const live = await findSessions(root, io.home, ids ? { window, ids } : { window });
 
@@ -173,6 +185,7 @@ async function gather(root: string, range: string | null, v: Values, io: Io): Pr
     const { records, missing, invalid } = readRecords(root, shas);
     for (const s of missing) io.stderr.write(`whyline: missing record for ${s.slice(0, 7)}\n`);
     for (const s of invalid) io.stderr.write(`whyline: unreadable record for ${s.slice(0, 7)}\n`);
+    if (v['from-notes'] && (missing.length || invalid.length)) return 3; // the user asked for notes, not a quiet fallback
     if (records.length && !missing.length && !invalid.length) {
       const n = records.length;
       return { result: mergeRecords(records, range ?? '', io.now()), banner: `from attached records (${n} ${n === 1 ? 'commit' : 'commits'})`, shas };
@@ -204,6 +217,7 @@ async function gather(root: string, range: string | null, v: Values, io: Io): Pr
     repo,
     now: io.now(),
     ...(prices ? { prices } : {}),
+    extraSpecRefs: shas ? shas.flatMap((s) => specReferences(commitMessage(root, s))) : [],
   });
   return { result, banner: null, shas };
 }
@@ -263,9 +277,15 @@ async function attach(root: string, range: string, v: Values, io: Io): Promise<n
     if (typeof loaded === 'string') { io.stderr.write(`whyline: cannot read prices ${v.prices}: ${loaded}\n`); return 1; }
     prices = loaded;
   }
-  const results = await attachCommits(root, shas, { prompts: !v['no-prompts'], now: io.now(), home: io.home, sign: v.sign, ...(v.key ? { key: v.key } : {}), ...(prices ? { prices } : {}) });
+  let since: number | undefined;
+  if (v.since) {
+    const parsed = parseSince(v.since, io.now());
+    if (parsed === null) { io.stderr.write(`whyline: cannot parse --since ${v.since}\n`); return 1; }
+    since = parsed;
+  }
+  const results = await attachCommits(root, shas, { prompts: !v['no-prompts'], now: io.now(), home: io.home, sign: v.sign, ...(since !== undefined ? { since } : {}), ...(v.key ? { key: v.key } : {}), ...(prices ? { prices } : {}) });
   let attached = 0;
-  const failures: string[] = [];
+  const broken: string[] = []; // things that went wrong, as opposed to commits that simply had no agent session
   for (const res of results) {
     const short = res.sha.slice(0, 7);
     if (res.status === 'attached') {
@@ -273,16 +293,18 @@ async function attach(root: string, range: string, v: Values, io: Io): Promise<n
       const hunks = res.record.record.totals.hunks;
       const flagged = res.record.record.files.flatMap((f) => f.hunks).filter((h) => h.flags.length).length;
       if (!v.quiet) io.stdout.write(`${short}  attached (${hunks} ${hunks === 1 ? 'hunk' : 'hunks'}, ${flagged} flagged)\n`);
-    } else {
-      const why = res.status === 'skipped-merge' ? 'skipped (merge commit)' : res.status === 'no-sessions' ? 'no sessions' : res.status === 'sign-failed' ? `not signed: ${res.reason}` : 'write failed';
-      failures.push(`${short}  ${why}`);
-      (v.quiet ? io.stderr : io.stdout).write(`${short}  ${why}\n`);
+      continue;
     }
+    const why = res.status === 'skipped-merge' ? 'skipped (merge commit)' : res.status === 'no-sessions' ? 'no sessions' : res.status === 'sign-failed' ? `not signed: ${res.reason}` : 'write failed';
+    const failure = res.status === 'sign-failed' || res.status === 'write-failed';
+    if (failure) broken.push(`${short}  ${why}`);
+    if (!v.quiet || failure) (v.quiet ? io.stderr : io.stdout).write(`${short}  ${why}\n`);
   }
-  if (attached === 0) {
-    if (v.quiet) writeLastError(root, failures.join('; ') || 'nothing to attach');
-    return 3;
+  if (v.quiet) {
+    if (broken.length) writeLastError(root, broken.join('; '));
+    else if (attached) clearLastError(root);
   }
+  if (attached === 0) return 3;
   if (v.push) {
     const err = pushNotes(root, v.remote);
     if (err) { io.stderr.write(`whyline: push failed: ${err}\n`); return 1; }
@@ -307,10 +329,11 @@ async function exportCmd(root: string, range: string, v: Values, io: Io): Promis
 }
 
 async function verifyCmd(root: string, range: string, io: Io): Promise<number> {
-  const shas = revList(root, range).filter((s) => parents(root, s).length <= 1);
-  if (shas.length === 0) { io.stderr.write(`whyline: unknown revision "${range}"\n`); return 1; }
-  const results = verifyCommits(root, shas);
-  io.stdout.write(results.map(describeResult).join('\n') + '\n');
+  const all = revList(root, range);
+  if (all.length === 0) { io.stderr.write(`whyline: unknown revision "${range}"\n`); return 1; }
+  const results = verifyCommits(root, all.filter((s) => parents(root, s).length <= 1));
+  const lines = all.map((s) => parents(root, s).length > 1 ? `${s.slice(0, 7)}  merge (not recorded)` : describeResult(results.find((r) => r.sha === s)!));
+  io.stdout.write(lines.join('\n') + '\n');
   return allGood(results) ? 0 : 3;
 }
 
@@ -325,10 +348,6 @@ function loadPrices(spec: string): PriceTable | string {
   }
   if (!isPriceTable(parsed)) return 'expected {"<model>": {"input","output","cacheRead","cacheWrite"}} in USD per million tokens';
   return mergePrices(PRICES, parsed);
-}
-
-function writeLastError(root: string, text: string): void {
-  try { writeFileSync(join(gitDir(root), 'whyline-last-error'), `${new Date().toISOString()} ${text}\n`); } catch { /* best effort; doctor reports what it can */ }
 }
 
 async function sessions(root: string, io: Io): Promise<number> {
@@ -353,6 +372,7 @@ async function doctor(root: string, io: Io): Promise<number> {
   }
   const hook = hookStatus(root);
   out.push(hook.installed ? `hook: installed (${hook.line})` : 'hook: not installed (whyline install)');
+  if (hook.installed && !onPath(io.env)) out.push('  whyline is not on PATH: the hook cannot run (npm i -g whyline)');
   const key = signingKey(root);
   out.push(typeof key === 'string' ? 'signing: not configured' : `signing: ${key.signer} with ${key.key}`);
   const err = lastError(root);

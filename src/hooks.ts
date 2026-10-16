@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { gitDir, hooksDir } from './git.js';
 
@@ -31,6 +31,10 @@ export function installHook(root: string, opts: { sign: boolean; prompts: boolea
   const created = !existsSync(path);
   mkdirSync(dirname(path), { recursive: true });
   const existing = created ? '#!/bin/sh\n' : readFileSync(path, 'utf8');
+  const shebang = existing.split('\n')[0] ?? '';
+  if (shebang.startsWith('#!') && !/\b(sh|bash|zsh|dash|ksh)\b/.test(shebang)) {
+    throw new Error(`${path} is not a shell script (${shebang}); add this line to it yourself:\n${hookLine(opts)}`);
+  }
   let base = stripBlock(existing);
   if (!base.endsWith('\n')) base += '\n';
   writeFileSync(path, base + block(hookLine(opts)));
@@ -58,4 +62,20 @@ export function hookStatus(root: string): { installed: boolean; path: string; li
 
 export function lastError(root: string): string | null {
   try { return readFileSync(join(gitDir(root), 'whyline-last-error'), 'utf8').trim(); } catch { return null; }
+}
+
+export function writeLastError(root: string, text: string): void {
+  try { writeFileSync(join(gitDir(root), 'whyline-last-error'), `${new Date().toISOString()} ${text}\n`); } catch { /* best effort; doctor reports what it can */ }
+}
+
+export function clearLastError(root: string): void {
+  try { unlinkSync(join(gitDir(root), 'whyline-last-error')); } catch { /* nothing to clear */ }
+}
+
+/** The hook runs `whyline` by name; without it on PATH every commit will print "command not found". */
+export function onPath(env: NodeJS.ProcessEnv): boolean {
+  for (const dir of (env.PATH ?? '').split(':').filter(Boolean)) {
+    try { if (statSync(join(dir, 'whyline')).isFile()) return true; } catch { /* keep looking */ }
+  }
+  return false;
 }

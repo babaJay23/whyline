@@ -15,6 +15,8 @@ export interface AttachOptions {
   home: string;
   sign?: boolean;
   key?: string;
+  /** Widen the session window back to this time; after a rebase the commits postdate the session that made them. */
+  since?: number;
 }
 
 export type AttachResult =
@@ -47,7 +49,8 @@ export async function attachCommits(root: string, shas: string[], opts: AttachOp
 export async function recordFor(root: string, sha: string, opts: AttachOptions): Promise<IntentRecord | null> {
   const [parent] = parents(root, sha);
   // Commit times are whole seconds; a session that ran in the same second as the commit still belongs to it.
-  const window = { from: parent ? commitTime(root, parent) : 0, to: commitTime(root, sha) + 999 };
+  const parentTime = parent ? commitTime(root, parent) : 0;
+  const window = { from: opts.since === undefined ? parentTime : Math.min(parentTime, opts.since), to: commitTime(root, sha) + 999 };
   const { selected } = await findSessions(root, opts.home, { window });
   if (selected.length === 0) return null;
 

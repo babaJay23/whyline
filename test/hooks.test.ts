@@ -32,6 +32,14 @@ describe('hooks', () => {
     expect(uninstallHook(r.dir).removed).toBe(false);
   });
 
+  it('refuses to append a shell line to a hook written in another language', () => {
+    const r = makeRepo({});
+    const path = join(r.dir, '.git', 'hooks', 'post-commit');
+    writeFileSync(path, '#!/usr/bin/env python3\nprint("theirs")\n', { mode: 0o755 });
+    expect(() => installHook(r.dir, { sign: false, prompts: true })).toThrow(/python3/);
+    expect(readFileSync(path, 'utf8')).toBe('#!/usr/bin/env python3\nprint("theirs")\n');
+  });
+
   it('honors core.hooksPath', () => {
     const r = makeRepo({});
     r.git('config', 'core.hooksPath', '.githooks');

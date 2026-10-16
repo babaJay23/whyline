@@ -10,5 +10,8 @@ describe('specReferences', () => {
   it('ignores ordinary prose and code', () => {
     expect(specReferences('fix the failing tests in src/a.ts')).toEqual([]);
     expect(specReferences('use #!/bin/sh and item #1 in the list')).toEqual([]); // #1 alone is too short to be an issue
+    expect(specReferences('encode as UTF-8, hash with SHA-256, dates in ISO-8601, fix CVE-2026-1')).toEqual([]);
+    expect(specReferences('edit planner.ts, inspect.ts and explanation.md')).toEqual([]); // keywords inside other words
+    expect(specReferences('see design.md, the plan.md and api-spec.yaml')).toEqual(['design.md', 'plan.md', 'api-spec.yaml']);
   });
 });

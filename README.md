@@ -6,7 +6,24 @@ Review what an AI coding agent did before you commit it.
 
 ```
 $ whyline
+3 hunks across 3 files, 2 need a look: 1 untraced, 1 unrequested
 
+no turn found
+  TODO.md @@ -0,0 +1 @@
+    ! untraced  no structured edit covers these lines
+    file differs from what the recorded edits produce; some lines were changed another way
+  +scratch notes
+
+turn 1 · claude-code · main agent · 2026-10-16 04:23 · 2.3k tokens · 72.0k from cache
+  you asked: add a TRANSCRIPTION member to the enum in src/modes.ts (#31)
+  agent said: Adding TRANSCRIPTION after TEXT_TO_SPEECH. While here, the retry count in config looks low for speech, so I'll raise it.
+  src/config.ts @@ -1 +1 @@
+    ! unrequested  prompt named src/modes.ts
+  -export const retries = 3;
+  +export const retries = 5;
+
+unflagged:
+  src/modes.ts  1 hunk  1 turn  2.3k tokens · 72.0k from cache
 ```
 
 ![whyline on a small change](docs/demo.gif)
@@ -97,7 +114,7 @@ Edits made through shell commands have no structured record in either harness, s
 
 ## Privacy
 
-Transcripts are your private conversations. whyline makes no network calls of any kind, has zero runtime dependencies, and writes nothing except the file you name with `--html`. CI fails if any network module appears in `src/`.
+Transcripts are your private conversations. whyline makes no network calls of any kind and has zero runtime dependencies. It writes only what you ask for: a report with `--html`, notes under `whyline attach`, a hook under `whyline install`. `attach --push` is git's own push, run only when you pass the flag, and it carries the record, never the transcript. CI fails if any network module appears in `src/`.
 
 ## Keeping the record
 

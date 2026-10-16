@@ -32,7 +32,7 @@ describe('attach', () => {
     r.git('checkout', '-q', 'main');
     await settle();
     const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
-    session(home, r.dir, Date.now() - 500, 'edit f.txt', 'f.txt', 'a', 'b');
+    session(home, r.dir, Date.now(), 'edit f.txt', 'f.txt', 'a', 'b'); // a full second after side, beyond the same-second tolerance
     r.write('f.txt', 'b\n');
     await settle();
     const c1 = r.commit('agent change');

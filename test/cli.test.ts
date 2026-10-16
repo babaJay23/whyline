@@ -206,8 +206,8 @@ describe('whyline (e2e)', () => {
     const none = io(r.dir, mkdtempSync(join(tmpdir(), 'whyline-empty-')));
     expect(await run(['attach', '--quiet'], none)).toBe(3);
     expect(none.out).toBe('');
-    expect(none.err).toContain('no sessions');
-    expect(readFileSync(join(r.dir, '.git', 'whyline-last-error'), 'utf8')).toContain('no sessions');
+    expect(none.err).toBe(''); // a commit with no agent session is routine for a hook, not an error
+    expect(existsSync(join(r.dir, '.git', 'whyline-last-error'))).toBe(false);
   });
 
   it('renders from attached records when transcripts are gone, and refuses a partial set', async () => {
@@ -339,6 +339,88 @@ describe('whyline (e2e)', () => {
     expect(report.out).toMatch(/^policy: PASS \(no policy given\)\n/);
     const missing = io(r.dir, home);
     expect(await run(['check', '--policy', join(home, 'nope.json')], missing)).toBe(1);
+  });
+
+  it('install warns when whyline is not on PATH, and doctor repeats it', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    const o = io(r.dir, home); // env is {} so PATH is empty
+    expect(await run(['install'], o)).toBe(0);
+    expect(o.err).toContain('whyline is not on PATH');
+    const d = io(r.dir, home);
+    await run(['doctor'], d);
+    expect(d.out).toContain('hook: installed');
+    expect(d.out).toContain('whyline is not on PATH');
+  });
+
+  it('a hand commit is not a failure, a sign failure is, and a later success clears it', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    r.write('f.txt', 'b\n');
+    r.commit('by hand');
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    const errFile = join(r.dir, '.git', 'whyline-last-error');
+    expect(await run(['attach', '--quiet'], io(r.dir, home))).toBe(3);
+    expect(existsSync(errFile)).toBe(false); // no agent session is routine for a hook
+    await settle();
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt per #10', [{ file: 'f.txt', old: 'b', neu: 'c' }]);
+    r.write('f.txt', 'c\n');
+    await settle();
+    r.commit('agent change');
+    expect(await run(['attach', '--quiet', '--sign'], io(r.dir, home))).toBe(3); // no signing key configured
+    expect(readFileSync(errFile, 'utf8')).toContain('not signed');
+    expect(await run(['attach', '--quiet'], io(r.dir, home))).toBe(0);
+    expect(existsSync(errFile)).toBe(false);
+  });
+
+  it('attach --since widens the window; merges are reported, not hidden; --from-notes refuses partial notes', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    const sessionAt = Date.now();
+    claudeSession(home, r.dir, sessionAt, 'edit f.txt per #10', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    await settle();
+    const base = r.commit('base'); // the session predates this commit, as after a rebase
+    r.write('f.txt', 'b\n');
+    await settle();
+    const c1 = r.commit('replayed agent change');
+    expect(await run(['attach', c1], io(r.dir, home))).toBe(3);
+    const widened = io(r.dir, home);
+    expect(await run(['attach', c1, '--since', new Date(sessionAt - 1000).toISOString()], widened)).toBe(0);
+    expect(widened.out).toContain('attached');
+
+    r.git('checkout', '-q', '-b', 'side', base);
+    r.write('g.txt', 'g\n');
+    r.commit('side');
+    r.git('checkout', '-q', 'main');
+    const m = r.merge('side');
+    const v = io(r.dir, home);
+    await run(['verify', `${base}..${m}`], v);
+    expect(v.out).toContain(`${m.slice(0, 7)}  merge (not recorded)`);
+    const gone = mkdtempSync(join(tmpdir(), 'whyline-gone-'));
+    const notes = io(r.dir, gone);
+    await run([`${base}..${m}`, '--all'], notes);
+    expect(notes.err).toContain('merge commit');
+
+    r.write('f.txt', 'd\n');
+    const c3 = r.commit('by hand, no record');
+    const partial = io(r.dir, home); // transcripts exist, notes are partial, user insisted on notes
+    expect(await run([`${base}..${c3}`, '--from-notes'], partial)).toBe(3);
+    expect(partial.err).toContain(`missing record for ${c3.slice(0, 7)}`);
+  });
+
+  it('a live range review honours a Spec: trailer in the commit message', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    const base = r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    r.write('f.txt', 'b\n');
+    await settle();
+    const c1 = r.commit('agent change\n\nSpec: docs/design.md');
+    const o = io(r.dir, home);
+    expect(await run([`${base}..${c1}`], o)).toBe(0);
+    expect(o.out).toContain('nothing flagged');
   });
 
   it('lists sessions and runs doctor', async () => {

@@ -13,6 +13,7 @@ import { signingKey } from './sign.js';
 import { randomUUID } from 'node:crypto';
 import { renderHtml } from './render/html.js';
 import { renderJson } from './render/json.js';
+import { renderMarkdown } from './render/markdown.js';
 import { renderTerminal, verdict } from './render/terminal.js';
 import { colorEnabled } from './render/ansi.js';
 import { parseUnifiedDiff, syntheticAdded } from './resolve/diff.js';
@@ -53,6 +54,7 @@ options
   --since <when>   only sessions after an ISO date or Nd (e.g. 7d)
   --session <id>   use only this session (repeatable, prefix ok)
   --no-color       disable colors (NO_COLOR is also honored)
+  --format md      print GitHub-flavoured Markdown (for a PR description or comment)
   --from-notes     read attached records instead of local transcripts
   --no-notes       never fall back to attached records
 `;
@@ -203,6 +205,7 @@ async function gather(root: string, range: string | null, v: Values, io: Io): Pr
 }
 
 async function review(root: string, range: string | null, v: Values, io: Io): Promise<number> {
+  if (v.format && v.format !== 'md') { io.stderr.write(`whyline: --format must be md here\n\n${USAGE}`); return 1; }
   const g = await gather(root, range, v, io);
   if (typeof g === 'number') return g;
   const { result, banner } = g;
@@ -217,6 +220,7 @@ async function review(root: string, range: string | null, v: Values, io: Io): Pr
     }
   }
   if (v.json) { io.stdout.write(renderJson(result)); return 0; }
+  if (v.format === 'md') { io.stdout.write(renderMarkdown(result, { all: v.all, ...extra })); return 0; }
   if (v.html) { io.stdout.write(`${verdict(result)}\nwrote ${v.html}\n`); return 0; }
   io.stdout.write(renderTerminal(result, { color: colorEnabled(v['no-color'], io.stdout, io.env), all: v.all, brief: v.brief, ...extra }));
   return 0;

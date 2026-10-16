@@ -303,6 +303,21 @@ describe('whyline (e2e)', () => {
     expect(d2.out).toContain('hook: not installed');
   });
 
+  it('prints markdown with --format md', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt per #42', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    r.write('f.txt', 'b\n');
+    const o = io(r.dir, home);
+    expect(await run(['--format', 'md', '--all'], o)).toBe(0);
+    expect(o.out).toMatch(/^\*\*1 hunk across 1 file, nothing flagged\*\*\n/);
+    expect(o.out).toContain('- `f.txt` @@ -1 +1 @@\n');
+    const bad = io(r.dir, home);
+    expect(await run(['--format', 'xml'], bad)).toBe(1);
+  });
+
   it('lists sessions and runs doctor', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     r.commit('base');

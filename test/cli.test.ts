@@ -265,6 +265,25 @@ describe('whyline (e2e)', () => {
     expect(await run(['export', '--format', 'csv'], bad)).toBe(1);
   });
 
+  it('verify reports each commit and fails on a missing record', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    const base = r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    r.write('f.txt', 'b\n');
+    await settle();
+    const c1 = r.commit('agent change');
+    r.write('f.txt', 'c\n');
+    const c2 = r.commit('by hand');
+    expect(await run(['attach', c1], io(r.dir, home))).toBe(0);
+    const o = io(r.dir, home);
+    expect(await run(['verify', `${base}..${c2}`], o)).toBe(3);
+    expect(o.out).toBe(`${c1.slice(0, 7)}  attached  hash ok  unsigned\n${c2.slice(0, 7)}  missing\n`);
+    const ok = io(r.dir, home);
+    expect(await run(['verify', c1], ok)).toBe(0);
+  });
+
   it('lists sessions and runs doctor', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     r.commit('base');

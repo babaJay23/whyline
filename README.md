@@ -63,6 +63,9 @@ whyline --brief              # headers and flags only; cheap for an agent to rea
 whyline --prices default     # add dollar estimates at list prices
 whyline sessions             # which sessions it found for this repo
 whyline doctor               # what it can and cannot see on this machine
+whyline attach [range]       # keep the record with the code (see below)
+whyline verify [range]       # are the records present and unaltered?
+whyline export [range] --format agent-trace
 ```
 
 ## Tokens and cost
@@ -93,6 +96,25 @@ Edits made through shell commands have no structured record in either harness, s
 ## Privacy
 
 Transcripts are your private conversations. whyline makes no network calls of any kind, has zero runtime dependencies, and writes nothing except the file you name with `--html`. CI fails if any network module appears in `src/`.
+
+## Keeping the record
+
+Transcripts are deleted by the harness after a while (Claude Code: 30 days). To keep the answer to "why is this line here" with the code:
+
+```
+whyline attach              # write an intent record for HEAD into git notes (refs/notes/whyline)
+whyline attach main..HEAD   # one record per commit
+whyline attach --push       # and push the notes ref to origin
+whyline verify main..HEAD   # every commit attached, unaltered?
+```
+
+A record is exactly what `--json` prints for that commit, plus a hash. It holds the 120-character prompt excerpts and one line of agent reasoning per hunk, never the transcript. `--no-prompts` leaves even those out, for public repos.
+
+On any machine with the notes fetched (`git fetch origin refs/notes/whyline:refs/notes/whyline`), `whyline <range>` renders from the records when no transcript is present, and says so in its second line.
+
+`whyline export main..HEAD --format agent-trace` prints the same records in the [Agent Trace](https://agent-trace.dev) format, one JSON line per commit.
+
+Records are produced on the author's machine from the author's transcripts: self-reported. The hash proves a record was not altered after it was written; it does not prove the transcript was honest.
 
 ## Related tools
 

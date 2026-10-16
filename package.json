@@ -1,6 +1,6 @@
 {
   "name": "whyline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "git blame for AI agents: which prompt wrote this line, what the agent was thinking, and what it cost",
   "license": "MIT",
   "repository": {
@@ -26,7 +26,6 @@
     "check": "npm run typecheck && npm test && sh scripts/no-network.sh",
     "prepublishOnly": "npm run check && npm run build"
   },
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^20.14.0",
     "typescript": "^5.6.0",

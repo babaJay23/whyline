@@ -7,6 +7,7 @@ import { mergeRecords, readRecords } from './merge.js';
 import { attachCommits, recordFor } from './attach.js';
 import { toAgentTrace } from './export/agent-trace.js';
 import { parseRecord } from './record.js';
+import { allGood, describeResult, verifyCommits } from './verify.js';
 import { randomUUID } from 'node:crypto';
 import { renderHtml } from './render/html.js';
 import { renderJson } from './render/json.js';
@@ -36,6 +37,7 @@ whyline attach [range]           write an intent record for each commit into git
   --push           push refs/notes/whyline to --remote (default origin) afterwards
   --quiet          print only failures (for hooks)
 whyline export [range] --format agent-trace   print one Agent Trace record per commit (JSON lines)
+whyline verify [range]           check attached records: present, unaltered, signed
 
 options
   --all            show unflagged hunks too
@@ -68,6 +70,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (cmd === 'doctor') return doctor(root, io);
   if (cmd === 'attach') return attach(root, args.positionals[1] ?? 'HEAD', args.values, io);
   if (cmd === 'export') return exportCmd(root, args.positionals[1] ?? 'HEAD', args.values, io);
+  if (cmd === 'verify') return verifyCmd(root, args.positionals[1] ?? 'HEAD', io);
   return review(root, cmd ?? null, args.values, io);
 }
 
@@ -252,6 +255,14 @@ async function exportCmd(root: string, range: string, v: Values, io: Io): Promis
     io.stdout.write(JSON.stringify(toAgentTrace(rec, randomUUID())) + '\n');
   }
   return missing ? 3 : 0;
+}
+
+async function verifyCmd(root: string, range: string, io: Io): Promise<number> {
+  const shas = revList(root, range).filter((s) => parents(root, s).length <= 1);
+  if (shas.length === 0) { io.stderr.write(`whyline: unknown revision "${range}"\n`); return 1; }
+  const results = verifyCommits(root, shas);
+  io.stdout.write(results.map(describeResult).join('\n') + '\n');
+  return allGood(results) ? 0 : 3;
 }
 
 /** "default" is the built-in table; a file path is merged over it. Returns an error string on failure. */

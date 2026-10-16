@@ -36,6 +36,7 @@ whyline attach [range]           write an intent record for each commit into git
   --no-prompts     leave prompt and reasoning text out of the record
   --push           push refs/notes/whyline to --remote (default origin) afterwards
   --quiet          print only failures (for hooks)
+  --sign           sign the record with your git ssh signing key (--key <path> to override)
 whyline export [range] --format agent-trace   print one Agent Trace record per commit (JSON lines)
 whyline verify [range]           check attached records: present, unaltered, signed
 
@@ -93,6 +94,8 @@ function parseOptions(argv: string[]) {
       push: { type: 'boolean', default: false },
       remote: { type: 'string', default: 'origin' },
       quiet: { type: 'boolean', default: false },
+      sign: { type: 'boolean', default: false },
+      key: { type: 'string' },
       format: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
@@ -214,7 +217,7 @@ async function attach(root: string, range: string, v: Values, io: Io): Promise<n
     if (typeof loaded === 'string') { io.stderr.write(`whyline: cannot read prices ${v.prices}: ${loaded}\n`); return 1; }
     prices = loaded;
   }
-  const results = await attachCommits(root, shas, { prompts: !v['no-prompts'], now: io.now(), home: io.home, ...(prices ? { prices } : {}) });
+  const results = await attachCommits(root, shas, { prompts: !v['no-prompts'], now: io.now(), home: io.home, sign: v.sign, ...(v.key ? { key: v.key } : {}), ...(prices ? { prices } : {}) });
   let attached = 0;
   const failures: string[] = [];
   for (const res of results) {
@@ -225,7 +228,7 @@ async function attach(root: string, range: string, v: Values, io: Io): Promise<n
       const flagged = res.record.record.files.flatMap((f) => f.hunks).filter((h) => h.flags.length).length;
       if (!v.quiet) io.stdout.write(`${short}  attached (${hunks} ${hunks === 1 ? 'hunk' : 'hunks'}, ${flagged} flagged)\n`);
     } else {
-      const why = res.status === 'skipped-merge' ? 'skipped (merge commit)' : res.status === 'no-sessions' ? 'no sessions' : 'write failed';
+      const why = res.status === 'skipped-merge' ? 'skipped (merge commit)' : res.status === 'no-sessions' ? 'no sessions' : res.status === 'sign-failed' ? `not signed: ${res.reason}` : 'write failed';
       failures.push(`${short}  ${why}`);
       (v.quiet ? io.stderr : io.stdout).write(`${short}  ${why}\n`);
     }

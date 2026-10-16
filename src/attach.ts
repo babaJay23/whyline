@@ -5,19 +5,23 @@ import { resolve } from './resolve/resolve.js';
 import type { RepoFiles } from './resolve/flags.js';
 import { findSessions } from './sessions.js';
 import type { PriceTable } from './pricing.js';
+import { signHash, signingKey } from './sign.js';
 
 export interface AttachOptions {
   prompts: boolean;
   prices?: PriceTable;
   now: number;
   home: string;
+  sign?: boolean;
+  key?: string;
 }
 
 export type AttachResult =
   | { sha: string; status: 'attached'; record: IntentRecord }
   | { sha: string; status: 'skipped-merge' }
   | { sha: string; status: 'no-sessions' }
-  | { sha: string; status: 'write-failed' };
+  | { sha: string; status: 'write-failed' }
+  | { sha: string; status: 'sign-failed'; reason: string };
 
 export async function attachCommits(root: string, shas: string[], opts: AttachOptions): Promise<AttachResult[]> {
   const out: AttachResult[] = [];
@@ -25,6 +29,13 @@ export async function attachCommits(root: string, shas: string[], opts: AttachOp
     if (parents(root, sha).length > 1) { out.push({ sha, status: 'skipped-merge' }); continue; }
     const record = await recordFor(root, sha, opts);
     if (!record) { out.push({ sha, status: 'no-sessions' }); continue; }
+    if (opts.sign) {
+      const k = signingKey(root, opts.key);
+      if (typeof k === 'string') { out.push({ sha, status: 'sign-failed', reason: k }); continue; }
+      const sig = signHash(record.hash, k.key, k.signer);
+      if (typeof sig === 'string') { out.push({ sha, status: 'sign-failed', reason: sig }); continue; }
+      record.signature = sig;
+    }
     const ok = noteAdd(root, sha, JSON.stringify(record, null, 2) + '\n');
     out.push(ok ? { sha, status: 'attached', record } : { sha, status: 'write-failed' });
   }

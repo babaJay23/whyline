@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { verifyCommits } from '../src/verify.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeRepo } from './helpers/tmp-repo.js';
@@ -52,6 +54,32 @@ describe('attach', () => {
     expect(replaced.prompts).toBe(false);
     expect(replaced.record.files[0]!.hunks[0]!.lead?.prompt.text).toBe('');
     expect(await recordFor(r.dir, side, opts)).toBeNull();
+  });
+
+  it('signs records when asked and verify reports the signer', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    session(home, r.dir, Date.now() - 500, 'edit f.txt', 'f.txt', 'a', 'b');
+    r.write('f.txt', 'b\n');
+    await settle();
+    const c1 = r.commit('agent change');
+    const keydir = mkdtempSync(join(tmpdir(), 'whyline-key-'));
+    const key = join(keydir, 'k');
+    execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
+    writeFileSync(join(keydir, 'allowed'), `dev@example.com ${readFileSync(key + '.pub', 'utf8')}`);
+    r.git('config', 'gpg.format', 'ssh');
+    r.git('config', 'user.email', 'dev@example.com');
+    r.git('config', 'user.signingkey', key);
+    r.git('config', 'gpg.ssh.allowedSignersFile', join(keydir, 'allowed'));
+    const [res] = await attachCommits(r.dir, [c1], { prompts: true, now: Date.now(), home, sign: true });
+    expect(res!.status).toBe('attached');
+    expect(verifyCommits(r.dir, [c1])[0]!.signature).toEqual({ signer: 'dev@example.com' });
+    r.git('config', 'user.signingkey', key + '.missing');
+    const [bad] = await attachCommits(r.dir, [c1], { prompts: true, now: Date.now(), home, sign: true });
+    expect(bad!.status).toBe('sign-failed');
+    expect(verifyCommits(r.dir, [c1])[0]!.signature).toEqual({ signer: 'dev@example.com' }); // the earlier good record was not replaced
   });
 
   it('handles a root commit with no parent', async () => {

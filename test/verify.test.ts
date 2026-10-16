@@ -30,6 +30,6 @@ describe('verifyCommits', () => {
     noteAdd(r.dir, a, JSON.stringify({ ...rec, signature: { format: 'ssh', signer: 'me@x', namespace: 'whyline', sig: 'SIG' } }));
     expect(verifyCommits(r.dir, [a], { verifySig: () => true })[0]!.signature).toEqual({ signer: 'me@x' });
     expect(verifyCommits(r.dir, [a], { verifySig: () => false })[0]!.signature).toBe('bad');
-    expect(verifyCommits(r.dir, [a])[0]!.signature).toBeNull();
+    expect(verifyCommits(r.dir, [a])[0]!.signature).toBe('bad'); // no allowed_signers file configured, so it cannot verify
   });
 });

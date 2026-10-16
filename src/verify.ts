@@ -1,5 +1,6 @@
 import { noteShow } from './git.js';
 import { hashOf, parseRecord, type Signature } from './record.js';
+import { allowedSignersFile, verifySignature } from './sign.js';
 
 export interface VerifyResult {
   sha: string;
@@ -9,6 +10,7 @@ export interface VerifyResult {
 }
 
 export function verifyCommits(root: string, shas: string[], deps: { verifySig?: (hash: string, sig: Signature) => boolean } = {}): VerifyResult[] {
+  const check = deps.verifySig ?? ((hash, sig) => verifySignature(hash, sig, allowedSignersFile(root)));
   return shas.map((sha) => {
     const text = noteShow(root, sha);
     const rec = text ? parseRecord(text) : null;
@@ -16,8 +18,7 @@ export function verifyCommits(root: string, shas: string[], deps: { verifySig?: 
     const hash = hashOf(rec) === rec.hash ? 'ok' : 'mismatch';
     let signature: VerifyResult['signature'];
     if (!rec.signature) signature = 'unsigned';
-    else if (!deps.verifySig) signature = null;
-    else signature = deps.verifySig(rec.hash, rec.signature) ? { signer: rec.signature.signer } : 'bad';
+    else signature = check(rec.hash, rec.signature) ? { signer: rec.signature.signer } : 'bad';
     return { sha, attached: true, hash, signature };
   });
 }

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <rect width="1280" height="640" fill="#1e1e2e"/>
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" lengthAdjust="spacingAndGlyphs">
+    <rect x="120" y="172" width="80" height="16" rx="8" fill="#f38ba8" opacity="0.85"/>
+    <rect x="120" y="206" width="116" height="16" rx="8" fill="#a6e3a1"/>
+    <rect x="120" y="240" width="56" height="16" rx="8" fill="#a6e3a1" opacity="0.5"/>
+    <text x="276" y="252" font-size="96" font-weight="700" fill="#cdd6f4" textLength="420">why<tspan fill="#9399b2">line</tspan></text>
+    <text x="120" y="340" font-size="30" fill="#cdd6f4" textLength="1000">Review what an AI coding agent did before you commit it.</text>
+    <text x="120" y="412" font-size="24" fill="#f9e2af" textLength="190">! unrequested</text>
+    <text x="400" y="412" font-size="24" fill="#9399b2" textLength="370">prompt named src/modes.ts</text>
+    <text x="120" y="456" font-size="24" fill="#f9e2af" textLength="150">! untraced</text>
+    <text x="400" y="456" font-size="24" fill="#9399b2" textLength="540">no structured edit covers these lines</text>
+    <text x="120" y="500" font-size="24" fill="#f9e2af" textLength="150">! subagent</text>
+    <text x="400" y="500" font-size="24" fill="#9399b2" textLength="370">conduit-platform-engineer</text>
+    <text x="120" y="570" font-size="19" fill="#6c7086" textLength="1040">npm i -g @nmdlabs/whyline  ·  zero dependencies  ·  no model calls  ·  nothing leaves your machine</text>
+  </g>
+</svg>

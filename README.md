@@ -1,8 +1,22 @@
-# whyline
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo-light.svg" width="420" alt="whyline">
+  </picture>
+</p>
 
-Review what an AI coding agent did before you commit it.
+<p align="center">Review what an AI coding agent did before you commit it.</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@nmdlabs/whyline"><img src="https://img.shields.io/npm/v/%40nmdlabs%2Fwhyline?color=a6e3a1&label=npm" alt="npm"></a>
+  <a href="https://github.com/nmdlabs/whyline/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/nmdlabs/whyline/ci.yml?branch=main&label=ci" alt="ci"></a>
+  <img src="https://img.shields.io/badge/dependencies-0-a6e3a1" alt="zero dependencies">
+  <img src="https://img.shields.io/badge/license-MIT-9399b2" alt="MIT">
+</p>
 
 `whyline` reads the session transcripts that Claude Code and Codex already write to disk, matches every changed hunk in your diff back to the prompt and edit that produced it, and tells you which hunks to look at first.
+
+![whyline on a small change](docs/demo.gif)
 
 ```
 $ whyline
@@ -25,8 +39,6 @@ turn 1 · claude-code · main agent · 2026-10-16 04:23 · 2.3k tokens · 72.0k 
 unflagged:
   src/modes.ts  1 hunk  1 turn  2.3k tokens · 72.0k from cache
 ```
-
-![whyline on a small change](docs/demo.gif)
 
 The agent was asked for one enum member. It also changed a retry count in a file nobody mentioned, and explained why in a sentence you would have scrolled past. `TODO.md` was written by hand, so no turn accounts for it. The hunk you actually asked for is one line in the summary at the bottom.
 

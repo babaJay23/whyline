@@ -16,6 +16,9 @@ export function makeRepo(files: Record<string, string> = {}) {
       },
     }).trim();
   git('init', '-q', '-b', 'main');
+  // A real user has an identity or their commits would fail; CI runners do not, and git notes needs one too.
+  git('config', 'user.name', 't');
+  git('config', 'user.email', 't@t');
   const write = (path: string, content: string) => {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), content);

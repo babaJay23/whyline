@@ -49,10 +49,10 @@ Every flag is a plain rule over the transcript and the diff. No model is called.
 ## Install
 
 ```
-npm i -g whyline
+npm i -g @nmdlabs/whyline
 ```
 
-Or run it without installing: `npx whyline`.
+Or run it without installing: `npx @nmdlabs/whyline`.
 
 ## Usage
 
@@ -153,7 +153,7 @@ Then a CI job can review the branch without any transcript:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
 - run: git fetch origin refs/notes/whyline:refs/notes/whyline
-- run: npx whyline check origin/main...HEAD --policy .whyline.json --format md > whyline.md || true
+- run: npx @nmdlabs/whyline check origin/main...HEAD --policy .whyline.json --format md > whyline.md || true
 - uses: marocchino/sticky-pull-request-comment@v2
   with: { path: whyline.md }
 ```

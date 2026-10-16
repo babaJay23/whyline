@@ -244,6 +244,27 @@ describe('whyline (e2e)', () => {
     expect(forced.out).toContain('from attached records');
   });
 
+  it('exports Agent Trace records as JSON lines, from notes or transcripts', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    const base = r.commit('base');
+    await settle();
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    claudeSession(home, r.dir, Date.now() - 500, 'edit f.txt', [{ file: 'f.txt', old: 'a', neu: 'b' }]);
+    r.write('f.txt', 'b\n');
+    await settle();
+    const c1 = r.commit('agent change');
+    const o = io(r.dir, home);
+    expect(await run(['export', `${base}..${c1}`, '--format', 'agent-trace'], o)).toBe(0);
+    const lines = o.out.trim().split('\n');
+    expect(lines).toHaveLength(1);
+    const rec = JSON.parse(lines[0]!);
+    expect(rec.vcs.revision).toBe(c1);
+    expect(rec.files[0].path).toBe('f.txt');
+    expect(rec.files[0].conversations[0].ranges).toEqual([{ start_line: 1, end_line: 1 }]);
+    const bad = io(r.dir, home);
+    expect(await run(['export', '--format', 'csv'], bad)).toBe(1);
+  });
+
   it('lists sessions and runs doctor', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     r.commit('base');

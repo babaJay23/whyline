@@ -2,9 +2,12 @@ import { parseArgs } from 'node:util';
 import { writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { adapters } from './adapters/index.js';
-import { commitTime, diffText, gitDir, hasCommits, lsFiles, mergeBase, parents, parseRange, pushNotes, readWorkingFile, repoRoot, revList, show, untracked } from './git.js';
+import { commitTime, diffText, gitDir, hasCommits, lsFiles, mergeBase, noteShow, parents, parseRange, pushNotes, readWorkingFile, repoRoot, revList, show, untracked } from './git.js';
 import { mergeRecords, readRecords } from './merge.js';
-import { attachCommits } from './attach.js';
+import { attachCommits, recordFor } from './attach.js';
+import { toAgentTrace } from './export/agent-trace.js';
+import { parseRecord } from './record.js';
+import { randomUUID } from 'node:crypto';
 import { renderHtml } from './render/html.js';
 import { renderJson } from './render/json.js';
 import { renderTerminal, verdict } from './render/terminal.js';
@@ -32,6 +35,7 @@ whyline attach [range]           write an intent record for each commit into git
   --no-prompts     leave prompt and reasoning text out of the record
   --push           push refs/notes/whyline to --remote (default origin) afterwards
   --quiet          print only failures (for hooks)
+whyline export [range] --format agent-trace   print one Agent Trace record per commit (JSON lines)
 
 options
   --all            show unflagged hunks too
@@ -63,6 +67,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (cmd === 'sessions') return sessions(root, io);
   if (cmd === 'doctor') return doctor(root, io);
   if (cmd === 'attach') return attach(root, args.positionals[1] ?? 'HEAD', args.values, io);
+  if (cmd === 'export') return exportCmd(root, args.positionals[1] ?? 'HEAD', args.values, io);
   return review(root, cmd ?? null, args.values, io);
 }
 
@@ -85,6 +90,7 @@ function parseOptions(argv: string[]) {
       push: { type: 'boolean', default: false },
       remote: { type: 'string', default: 'origin' },
       quiet: { type: 'boolean', default: false },
+      format: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -231,6 +237,21 @@ async function attach(root: string, range: string, v: Values, io: Io): Promise<n
     if (!v.quiet) io.stdout.write(`pushed refs/notes/whyline to ${v.remote}\n`);
   }
   return 0;
+}
+
+async function exportCmd(root: string, range: string, v: Values, io: Io): Promise<number> {
+  if (v.format !== 'agent-trace') { io.stderr.write(`whyline: --format must be agent-trace\n\n${USAGE}`); return 1; }
+  const shas = revList(root, range).filter((s) => parents(root, s).length <= 1);
+  if (shas.length === 0) { io.stderr.write(`whyline: unknown revision "${range}"\n`); return 1; }
+  let missing = 0;
+  for (const sha of shas) {
+    const text = noteShow(root, sha);
+    let rec = text ? parseRecord(text) : null;
+    if (!rec && !v['from-notes']) rec = await recordFor(root, sha, { prompts: !v['no-prompts'], now: io.now(), home: io.home });
+    if (!rec) { io.stderr.write(`whyline: no record or transcript for ${sha.slice(0, 7)}\n`); missing++; continue; }
+    io.stdout.write(JSON.stringify(toAgentTrace(rec, randomUUID())) + '\n');
+  }
+  return missing ? 3 : 0;
 }
 
 /** "default" is the built-in table; a file path is merged over it. Returns an error string on failure. */

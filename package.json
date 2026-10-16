@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/babaJay23/whyline.git"
+    "url": "git+https://github.com/nmdlabs/whyline.git"
   },
   "type": "module",
   "bin": {

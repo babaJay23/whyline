@@ -284,6 +284,25 @@ describe('whyline (e2e)', () => {
     expect(await run(['verify', c1], ok)).toBe(0);
   });
 
+  it('install, doctor, uninstall', async () => {
+    const r = makeRepo({ 'f.txt': 'a\n' });
+    r.commit('base');
+    const home = mkdtempSync(join(tmpdir(), 'whyline-home-'));
+    const o = io(r.dir, home);
+    expect(await run(['install'], o)).toBe(0);
+    expect(o.out).toContain('installed post-commit hook');
+    const d = io(r.dir, home);
+    expect(await run(['doctor'], d)).toBe(0);
+    expect(d.out).toContain('hook: installed (whyline attach HEAD --quiet || true)');
+    expect(d.out).toContain('signing: not configured');
+    const u = io(r.dir, home);
+    expect(await run(['uninstall'], u)).toBe(0);
+    expect(u.out).toContain('removed');
+    const d2 = io(r.dir, home);
+    await run(['doctor'], d2);
+    expect(d2.out).toContain('hook: not installed');
+  });
+
   it('lists sessions and runs doctor', async () => {
     const r = makeRepo({ 'f.txt': 'a\n' });
     r.commit('base');

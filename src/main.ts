@@ -8,6 +8,8 @@ import { attachCommits, recordFor } from './attach.js';
 import { toAgentTrace } from './export/agent-trace.js';
 import { parseRecord } from './record.js';
 import { allGood, describeResult, verifyCommits } from './verify.js';
+import { hookStatus, installHook, lastError, uninstallHook } from './hooks.js';
+import { signingKey } from './sign.js';
 import { randomUUID } from 'node:crypto';
 import { renderHtml } from './render/html.js';
 import { renderJson } from './render/json.js';
@@ -39,6 +41,8 @@ whyline attach [range]           write an intent record for each commit into git
   --sign           sign the record with your git ssh signing key (--key <path> to override)
 whyline export [range] --format agent-trace   print one Agent Trace record per commit (JSON lines)
 whyline verify [range]           check attached records: present, unaltered, signed
+whyline install [--sign] [--no-prompts]   add a post-commit hook that attaches a record to every commit
+whyline uninstall                remove that hook
 
 options
   --all            show unflagged hunks too
@@ -72,6 +76,16 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (cmd === 'attach') return attach(root, args.positionals[1] ?? 'HEAD', args.values, io);
   if (cmd === 'export') return exportCmd(root, args.positionals[1] ?? 'HEAD', args.values, io);
   if (cmd === 'verify') return verifyCmd(root, args.positionals[1] ?? 'HEAD', io);
+  if (cmd === 'install') {
+    const { path, created } = installHook(root, { sign: args.values.sign, prompts: !args.values['no-prompts'] });
+    io.stdout.write(`${created ? 'installed' : 'updated'} post-commit hook at ${path}\n`);
+    return 0;
+  }
+  if (cmd === 'uninstall') {
+    const { path, removed } = uninstallHook(root);
+    io.stdout.write(removed ? `removed whyline block from ${path}\n` : `no whyline hook at ${path}\n`);
+    return 0;
+  }
   return review(root, cmd ?? null, args.values, io);
 }
 
@@ -305,6 +319,12 @@ async function doctor(root: string, io: Io): Promise<number> {
     const shells = mine.reduce((n, s) => n + s.events.filter((e) => e.kind === 'shell').length, 0);
     out.push(`${a.harness}: ${mine.length} ${mine.length === 1 ? 'session' : 'sessions'}, ${edits} structured edits, ${shells} shell commands, ${skipped} unreadable lines`);
   }
+  const hook = hookStatus(root);
+  out.push(hook.installed ? `hook: installed (${hook.line})` : 'hook: not installed (whyline install)');
+  const key = signingKey(root);
+  out.push(typeof key === 'string' ? 'signing: not configured' : `signing: ${key.signer} with ${key.key}`);
+  const err = lastError(root);
+  if (err) out.push(`last attach failed: ${err}`);
   out.push('', 'known gap: edits made through shell commands (sed, heredocs, scripts) have no structured record and show as untraced.');
   io.stdout.write(out.join('\n') + '\n');
   return 0;
